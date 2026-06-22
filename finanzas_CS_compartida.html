@@ -276,6 +276,11 @@
             <div style="font-size:0.68rem;color:var(--muted);font-weight:600;letter-spacing:0.06em;margin-bottom:2px;">🇺🇸 DÓLAR</div>
             <div class="kpi-value green" id="kpiIncomeUSD" style="font-size:1.5rem;">USD $0</div>
           </div>
+          <div style="padding-top:8px;border-top:1px solid var(--border);">
+            <div style="font-size:0.68rem;color:var(--muted);font-weight:600;letter-spacing:0.06em;margin-bottom:2px;">📊 TOTAL EN COP (aprox.)</div>
+            <div class="kpi-value green" id="kpiIncomeTotal" style="font-size:1.1rem;">$0</div>
+            <div style="font-size:0.68rem;color:var(--muted);margin-top:2px;" id="kpiTasaUsada"></div>
+          </div>
         </div>
         <div class="kpi-sub" id="kpiIncomeCount" style="margin-top:8px;">0 transacciones</div>
       </div>
@@ -414,7 +419,7 @@
       <button class="refresh-btn" onclick="loadData()">↻ Actualizar</button>
     </div>
     <div class="filter-row">
-      <select id="filterType" onchange="renderTable()">
+      <select id="filterType" onchange="onFilterTypeChange()">
         <option value="">Todos los tipos</option>
         <option value="income">Solo ingresos</option>
         <option value="expense">Solo gastos</option>
@@ -616,7 +621,6 @@
         <option value="activo">Activo</option>
         <option value="pausado">Pausado</option>
         <option value="terminado">Terminado</option>
-        <option value="listo">Listo para publicar</option>
       </select>
       <select id="filterPais" onchange="renderClientes()" style="flex:1;min-width:130px;">
         <option value="">🌎 Todos los países</option>
@@ -670,10 +674,6 @@
             <div class="form-group">
               <label>Nombre artístico</label>
               <input type="text" id="cNombreArt" placeholder="Ej: Halel, Luz y Vida...">
-            </div>
-            <div class="form-group">
-              <label>N° de identificación</label>
-              <input type="text" id="cIdentificacion" placeholder="Cédula, pasaporte...">
             </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -801,7 +801,6 @@
               <option value="activo">Activo</option>
               <option value="pausado">Pausado</option>
               <option value="terminado">Terminado</option>
-              <option value="listo">Listo para publicar</option>
             </select>
           </div>
           <div class="form-group">
@@ -1091,6 +1090,7 @@ function selectType(t) {
 
 // ─── ADD TRANSACTION ─────────────────────────────────────────────────────────
 async function addTransaction() {
+  const artistaId = selectedType === 'income' ? (document.getElementById('fDescSelect')?.value || '') : '';
   const desc = selectedType === 'income' ? getArtistaDesc() : 'Gasto';
   const amount = parseAmt('fAmount');
   const currency = document.getElementById('fCurrency').value;
@@ -1102,8 +1102,8 @@ async function addTransaction() {
   const note = document.getElementById('fNote').value.trim();
   const who = getWho();
 
-  if ((selectedType === 'income' && !desc) || !amount || !cat || !date) {
-    showToast('Completa todos los campos requeridos.', 'error');
+  if ((selectedType === 'income' && !artistaId && !desc) || !amount || !cat || !date) {
+    showToast(selectedType === 'income' && !artistaId && !desc ? 'Selecciona un artista o escribe el nombre.' : 'Completa todos los campos requeridos.', 'error');
     return;
   }
 
@@ -1119,16 +1119,15 @@ async function addTransaction() {
     amountCOP = Math.round(amount * tasaDia);
   }
 
-  const tx = { id: Date.now(), type: selectedType, desc, amount, currency, amountCOP, tasaDia, cat, programa, payment, date, note, who };
+  const tx = { id: Date.now(), type: selectedType, desc, artistaId, amount, currency, amountCOP, tasaDia, cat, programa, payment, date, note, who };
 
   try {
     await saveTransaction(tx);
     transactions.unshift(tx);
 
     // Si es ingreso de un artista registrado, abonarlo a su contrato
-    const selVal = document.getElementById('fDescSelect')?.value;
-    if (selectedType === 'income' && selVal && selVal !== '__nuevo') {
-      const c = clientes.find(x => x.id === selVal);
+    if (selectedType === 'income' && artistaId) {
+      const c = clientes.find(x => x.id === artistaId);
       if (c && getSaldoPendiente(c) > 0) {
         const numRecibo = 'CS-' + Date.now().toString().slice(-6);
         const pago = { id: Date.now().toString(), monto: amount, fecha: tx.date, medio: tx.payment || '', registradoPor: getWho(), numRecibo };
@@ -1193,6 +1192,13 @@ function renderDashboard() {
 
   document.getElementById('kpiIncome').textContent = fmt(incomeCOP);
   document.getElementById('kpiIncomeUSD').textContent = fmt(incomeUSD, 'USD');
+  const totalIncomeCOP = incomeCOP + incomeUSDenCOP;
+  document.getElementById('kpiIncomeTotal').textContent = fmt(totalIncomeCOP);
+  if (tasaUSD && incomeUSD > 0) {
+    document.getElementById('kpiTasaUsada').textContent = `Tasa usada: $${fmt(tasaUSD)}/USD`;
+  } else {
+    document.getElementById('kpiTasaUsada').textContent = '';
+  }
   document.getElementById('kpiExpense').textContent = fmt(expense);
   document.getElementById('kpiBalance').textContent = fmt(balance);
   document.getElementById('kpiBalance').className = 'kpi-value ' + (balance >= 0 ? 'purple' : 'red');
@@ -1221,7 +1227,13 @@ function getLast6Months() {
 function renderBarChart() {
   const months = getLast6Months();
   const labels = months.map(m => formatMonthLabel(m));
-  const incomeData = months.map(m => transactions.filter(t => t.type==='income' && t.date && t.date.startsWith(m)).reduce((s,t)=>s+t.amount,0));
+  const incomeData = months.map(m => {
+    const txs = transactions.filter(t => t.type==='income' && t.date && t.date.startsWith(m));
+    return txs.reduce((s,t) => {
+      if (t.currency === 'USD') return s + (t.amountCOP || convertirACOP(t.amount, 'USD'));
+      return s + t.amount;
+    }, 0);
+  });
   const expenseData = months.map(m => transactions.filter(t => t.type==='expense' && t.date && t.date.startsWith(m)).reduce((s,t)=>s+t.amount,0));
 
   if (barChartInst) barChartInst.destroy();
@@ -1286,6 +1298,36 @@ function renderRecent() {
 }
 
 // ─── TABLE ───────────────────────────────────────────────────────────────────
+function onFilterTypeChange() {
+  const type = document.getElementById('filterType').value;
+  const catSel = document.getElementById('filterCat');
+  catSel.value = '';
+
+  if (type === 'income') {
+    // Todos los artistas registrados + los que han hecho pagos únicos
+    const artistasRegistrados = clientes.map(c => c.nombre);
+    const artistasPagosUnicos = transactions
+      .filter(t => t.type === 'income' && !clientes.find(c => c.nombre === t.desc))
+      .map(t => t.desc);
+    const todos = [...new Set([...artistasRegistrados, ...artistasPagosUnicos])].sort();
+    catSel.innerHTML = '<option value="">Todos los artistas</option>' +
+      todos.map(a => `<option>${a}</option>`).join('');
+  } else if (type === 'expense') {
+    // Siempre mostrar todas las categorías fijas de gastos
+    const todasCats = [
+      'Jhonfer','Yamid','Hugo','Alex','Músicos','Practicantes','Juanpa y Valen',
+      'Arriendo','Servicios','Internet','Aseo',
+      'Ads CS','Ads Clientes',
+      'Caja Menor','Programas','Eps','Ahorro Inversión','Diezmo','Ahorro Bóveda'
+    ];
+    catSel.innerHTML = '<option value="">Todas las categorías</option>' +
+      todasCats.map(c => `<option value="${c}">${c}</option>`).join('');
+  } else {
+    catSel.innerHTML = '<option value="">Todas las categorías</option>';
+  }
+  renderTable();
+}
+
 function renderTable() {
   const type = document.getElementById('filterType').value;
   const cat = document.getElementById('filterCat').value;
@@ -1294,7 +1336,15 @@ function renderTable() {
 
   let filtered = [...transactions];
   if (type) filtered = filtered.filter(t => t.type === type);
-  if (cat) filtered = filtered.filter(t => t.cat === cat);
+  if (cat) {
+    if (type === 'income') {
+      // Filtrar por nombre del artista
+      filtered = filtered.filter(t => t.desc === cat);
+    } else {
+      // Filtrar por categoría de gasto
+      filtered = filtered.filter(t => t.cat === cat);
+    }
+  }
   if (month) filtered = filtered.filter(t => t.date && t.date.startsWith(month));
   if (who) filtered = filtered.filter(t => t.who === who);
 
@@ -1334,10 +1384,14 @@ function renderTable() {
     `).join('');
   }
 
-  const cats = [...new Set(transactions.map(t => t.cat))].sort();
-  const catSel = document.getElementById('filterCat');
-  const cur = catSel.value;
-  catSel.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c => `<option ${c===cur?'selected':''}>${c}</option>`).join('');
+  // Solo repoblar el filtro de categorías si no hay tipo seleccionado
+  const typeVal = document.getElementById('filterType').value;
+  if (!typeVal) {
+    const cats = [...new Set(transactions.map(t => t.cat))].sort();
+    const catSel = document.getElementById('filterCat');
+    const cur = catSel.value;
+    catSel.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c => `<option ${c===cur?'selected':''}>${c}</option>`).join('');
+  }
 }
 
 // ─── BUDGET ──────────────────────────────────────────────────────────────────
@@ -1357,10 +1411,11 @@ function populateArtistaSelect() {
   if (!sel) return;
   const cur = sel.value;
   sel.innerHTML = '<option value="">— Seleccionar artista —</option>' +
-    clientes.filter(c => c.estado === 'activo' || c.estado === 'pausado')
-      .map(c => `<option value="${c.id}">${c.nombre}${c.pais ? ' ('+c.pais+')' : ''}</option>`)
+    clientes
+      .filter(c => c.estado === 'activo' || c.estado === 'pausado')
+      .map(c => `<option value="${c.id}">${c.nombre}${c.nombreArt ? ' · '+c.nombreArt : ''}${c.pais ? ' ('+c.pais+')' : ''}</option>`)
       .join('') +
-    '<option value="__nuevo">✏️ Artista sin contrato (escribir)</option>';
+    '<option value="__nuevo">✏️ Artista sin contrato (pago único)</option>';
   if (cur) sel.value = cur;
 }
 
@@ -1372,7 +1427,7 @@ function onArtistaSelect() {
 
   if (val === '__nuevo') {
     input.style.display = 'block';
-    input.placeholder = 'Nombre del artista...';
+    input.placeholder = 'Nombre del artista o cliente...';
     input.value = '';
     input.focus();
     infoBox.style.display = 'none';
@@ -1384,15 +1439,12 @@ function onArtistaSelect() {
       document.getElementById('artistaServicio').textContent = c.servicio;
       document.getElementById('artistaSaldo').textContent = 'Saldo pendiente: ' + fmt(getSaldoPendiente(c), c.moneda);
       document.getElementById('artistaCuota').textContent = fmt(c.cuota || 0, c.moneda);
-      // Auto-set currency
       document.getElementById('fCurrency').value = c.moneda || 'COP';
-      // Auto-set category to artist's service
       const catSel = document.getElementById('fCat');
       if (catSel) {
         const opt = [...catSel.options].find(o => o.value === c.servicio);
         if (opt) catSel.value = c.servicio;
       }
-      // Auto-set amount to cuota if empty
       if (!document.getElementById('fAmount').value && c.cuota) {
         document.getElementById('fAmount').value = new Intl.NumberFormat('es-CO').format(c.cuota);
         checkConversion();
@@ -1412,7 +1464,7 @@ function getArtistaDesc() {
     const c = clientes.find(x => x.id === val);
     return c ? c.nombre : '';
   }
-  return document.getElementById('fDesc').value.trim();
+  return '';
 }
 
 function onBudgetCatChange() {
@@ -1921,7 +1973,6 @@ function limpiarFiltros() {
 }
 
 function getEstadoLabel(estado) {
-  const map = { activo:'Activo', pausado:'Pausado', terminado:'Terminado', listo:'Listo para publicar' };
   return map[estado] || estado;
 }
 
