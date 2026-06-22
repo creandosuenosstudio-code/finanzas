@@ -244,8 +244,8 @@
       <span>Usuario:</span>
       <select id="whoSelect" onchange="saveWho()">
         <option value="Juanpa">Juanpa</option>
-        <option value="Valentina">Valentina</option>
-        <option value="John">John</option>
+        <option value="Valen">Valen</option>
+        <option value="Jhonfer">Jhonfer</option>
       </select>
     </div>
     <div class="sync-dot" id="syncDot" title="Conectado"></div>
@@ -430,8 +430,8 @@
       <select id="filterWho" onchange="renderTable()">
         <option value="">Todos los usuarios</option>
         <option>Juanpa</option>
-        <option>Valentina</option>
-        <option>John</option>
+        <option>Valen</option>
+        <option>Jhonfer</option>
       </select>
       <input type="month" id="filterMonth" onchange="renderTable()">
     </div>
@@ -788,12 +788,17 @@
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div class="form-group">
               <label>Día de pago (del mes)</label>
-              <input type="number" id="cDiaPago" placeholder="15" min="1" max="31">
+              <input type="number" id="cDiaPago" placeholder="Ej: 2, 15, 30" min="1" max="31">
             </div>
             <div class="form-group">
-              <label>Fecha inicio contrato</label>
-              <input type="date" id="cFechaInicio">
+              <label>Mes de inicio de cobro</label>
+              <input type="month" id="cMesInicioCobro" placeholder="Ej: 2026-08">
+              <div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">Mes desde el que se empieza a cobrar la cuota mensual</div>
             </div>
+          </div>
+          <div class="form-group">
+            <label>Fecha inicio contrato</label>
+            <input type="date" id="cFechaInicio">
           </div>
           <div class="form-group">
             <label>Estado</label>
@@ -1838,12 +1843,14 @@ function showClienteForm(id = null) {
       document.getElementById('cInicialMedio').value = c.inicialMedio || '';
       document.getElementById('cCuota').value = c.cuota || '';
       document.getElementById('cDiaPago').value = c.diaPago || '';
+      document.getElementById('cMesInicioCobro').value = c.mesInicioCobro || '';
       document.getElementById('cFechaInicio').value = c.fechaInicio || '';
       document.getElementById('cEstado').value = c.estado || 'activo';
       document.getElementById('cNotas').value = c.notas || '';
     }
   } else {
     ['cNombre','cCorreo','cPais','cWhatsapp','cCanciones','cValorCancion','cTotal','cInicial','cInicialMedio','cCuota','cDiaPago','cNotas'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('cMesInicioCobro').value = '';
     document.getElementById('cCumple').value = '';
     document.getElementById('cCumple2').value = '';
     document.getElementById('cPaisCodigo').value = '+57';
@@ -1881,6 +1888,7 @@ function saveCliente() {
     inicialMedio: document.getElementById('cInicialMedio').value.trim(),
     cuota: parseAmt('cCuota'),
     diaPago: parseInt(document.getElementById('cDiaPago').value) || 0,
+    mesInicioCobro: document.getElementById('cMesInicioCobro').value || '',
     fechaInicio: document.getElementById('cFechaInicio').value,
     estado: document.getElementById('cEstado').value,
     notas: document.getElementById('cNotas').value.trim(),
@@ -1947,13 +1955,21 @@ function getCuotaVencida(cliente) {
 function isMora(cliente) {
   if (cliente.estado !== 'activo') return false;
   if (!cliente.diaPago) return false;
+  if (getSaldoPendiente(cliente) <= 0) return false;
+
   const hoy = new Date();
-  const diaPago = cliente.diaPago;
+  const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
+
+  // Si tiene mes de inicio de cobro y aún no ha llegado, no está en mora
+  if (cliente.mesInicioCobro && mesActual < cliente.mesInicioCobro) return false;
+
+  // Verificar si ya pagó este mes
   const pagoEsteMes = (cliente.pagos || []).some(p => {
     const fp = new Date(p.fecha);
     return fp.getMonth() === hoy.getMonth() && fp.getFullYear() === hoy.getFullYear();
   });
-  return hoy.getDate() > diaPago && !pagoEsteMes && getSaldoPendiente(cliente) > 0;
+
+  return hoy.getDate() > cliente.diaPago && !pagoEsteMes;
 }
 
 function getEstadoBadge(cliente) {
@@ -2098,6 +2114,7 @@ function openFicha(id) {
       ${c.cumple ? `<div><span style="color:var(--muted)">Cumpleaños:</span> ${c.cumple}</div>` : ''}
       ${c.cumple2 ? `<div><span style="color:var(--muted)">Cumpleaños (2):</span> ${c.cumple2}</div>` : ''}
       ${c.diaPago ? `<div><span style="color:var(--muted)">Día de pago:</span> ${c.diaPago} de cada mes</div>` : ''}
+      ${c.mesInicioCobro ? `<div><span style="color:var(--muted)">Inicio de cobro:</span> ${formatMonthLabel(c.mesInicioCobro)}</div>` : ''}
       ${c.cuota ? `<div><span style="color:var(--muted)">Cuota estipulada:</span> ${fmt(c.cuota)}</div>` : ''}
       ${c.fechaInicio ? `<div><span style="color:var(--muted)">Inicio:</span> ${c.fechaInicio}</div>` : ''}
       ${c.notas ? `<div style="grid-column:1/-1;"><span style="color:var(--muted)">Notas:</span> ${c.notas}</div>` : ''}
@@ -2232,20 +2249,17 @@ function generarRecibo(c, pago, esInicial) {
   <div class="section">
     <div class="section-title">Estado del contrato</div>
     <div class="row"><span class="label">Total del contrato</span><span class="value">${fmt(c.total, c.moneda)}</span></div>
-    <div class="row"><span class="label">Total pagado</span><span class="value" style="color:#16a34a;">${fmt(totalPagado, c.moneda)}</span></div>
+    <div class="row"><span class="label">Este abono</span><span class="value" style="color:#0891b2;">+ ${fmt(pago.monto, c.moneda)}</span></div>
+    <div class="row"><span class="label">Total pagado hasta hoy</span><span class="value" style="color:#16a34a;">${fmt(totalPagado, c.moneda)}</span></div>
+    <div class="row" style="border-top:2px solid ${saldo > 0 ? '#fed7aa' : '#86efac'};margin-top:4px;padding-top:10px;">
+      <span class="label" style="font-weight:700;color:${saldo > 0 ? '#9a3412' : '#166534'};">
+        ${saldo > 0 ? 'Saldo pendiente' : '✓ Contrato saldado'}
+      </span>
+      <span class="value" style="font-size:1.1rem;color:${saldo > 0 ? '#9a3412' : '#166534'};">
+        ${saldo > 0 ? fmt(saldo, c.moneda) : '$0'}
+      </span>
+    </div>
   </div>
-
-  ${saldo > 0 ? `
-  <div class="saldo">
-    <span class="label">Saldo pendiente</span>
-    <span class="value">${fmt(saldo, c.moneda)}</span>
-  </div>
-  ` : `
-  <div class="saldo" style="background:#dcfce7;border-color:#86efac;">
-    <span class="label" style="color:#166534;">✓ Contrato saldado</span>
-    <span class="value" style="color:#166534;">$0</span>
-  </div>
-  `}
 
   <div class="footer">
     Creando Sueños Studio · creandosuenosstudio@gmail.com<br>
