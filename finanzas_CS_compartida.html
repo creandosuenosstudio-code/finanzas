@@ -13,8 +13,8 @@
     --surface: #17171a;
     --surface2: #1f1f24;
     --border: #2a2a31;
-    --accent: #7c6af7;
-    --accent2: #a78bfa;
+    --accent: #0891b2;
+    --accent2: #22d3ee;
     --green: #34d399;
     --red: #f87171;
     --yellow: #fbbf24;
@@ -148,7 +148,7 @@
   .badge.income { background: rgba(52,211,153,0.15); color: var(--green); }
   .badge.expense { background: rgba(248,113,113,0.15); color: var(--red); }
 
-  .who-badge { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 3px 9px; border-radius: 20px; background: rgba(124,106,247,0.15); color: var(--accent2); }
+  .who-badge { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 3px 9px; border-radius: 20px; background: rgba(8,145,178,0.15); color: var(--accent2); }
 
   .delete-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1rem; padding: 4px 8px; border-radius: 6px; transition: all 0.12s; }
   .delete-btn:hover { color: var(--red); background: rgba(248,113,113,0.1); }
@@ -206,8 +206,14 @@
   .toast.success { border-color: var(--green); color: var(--green); }
   .toast.error { border-color: var(--red); color: var(--red); }
 
-  .refresh-btn {
-    background: var(--surface2); border: 1px solid var(--border);
+  .amount-display {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.8rem;
+    color: var(--accent2);
+    margin-top: 4px;
+    font-weight: 600;
+    min-height: 18px;
+  }
     color: var(--muted); border-radius: 8px; padding: 7px 14px;
     font-size: 0.8rem; cursor: pointer; transition: all 0.15s;
     font-family: 'Inter', sans-serif;
@@ -228,9 +234,10 @@
   <div class="logo">Creando <span>Sueños</span> · Finanzas</div>
   <nav>
     <button class="active" onclick="showSection('dashboard')">Dashboard</button>
-    <button onclick="showSection('registro')">Registrar</button>
+    <button onclick="showSection('registro')">Registrar Transacción</button>
     <button onclick="showSection('movimientos')">Movimientos</button>
-    <button onclick="showSection('presupuesto')">Presupuesto</button>
+    <button onclick="showSection('presupuesto')">Gastos Fijos</button>
+    <button onclick="showSection('clientes')">Artistas</button>
   </nav>
   <div class="header-right">
     <div class="user-badge">
@@ -260,8 +267,17 @@
     <div class="kpi-row">
       <div class="kpi">
         <div class="kpi-label">Ingresos del mes</div>
-        <div class="kpi-value green" id="kpiIncome">$0</div>
-        <div class="kpi-sub" id="kpiIncomeCount">0 transacciones</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">
+          <div>
+            <div style="font-size:0.68rem;color:var(--muted);font-weight:600;letter-spacing:0.06em;margin-bottom:2px;">🇨🇴 PESO COLOMBIANO</div>
+            <div class="kpi-value green" id="kpiIncome" style="font-size:1.5rem;">$0</div>
+          </div>
+          <div>
+            <div style="font-size:0.68rem;color:var(--muted);font-weight:600;letter-spacing:0.06em;margin-bottom:2px;">🇺🇸 DÓLAR</div>
+            <div class="kpi-value green" id="kpiIncomeUSD" style="font-size:1.5rem;">USD $0</div>
+          </div>
+        </div>
+        <div class="kpi-sub" id="kpiIncomeCount" style="margin-top:8px;">0 transacciones</div>
       </div>
       <div class="kpi">
         <div class="kpi-label">Gastos del mes</div>
@@ -302,42 +318,79 @@
         <div class="type-btn expense" id="btnExpense" onclick="selectType('expense')">↓ Gasto</div>
       </div>
 
-      <div class="form-group">
-        <label>Descripción</label>
-        <input type="text" id="fDesc" placeholder="Ej: Servicio de lanzamiento — Willi">
+      <div class="form-group" id="fieldArtista">
+        <label>Nombre del artista</label>
+        <select id="fDescSelect" onchange="onArtistaSelect()" style="margin-bottom:8px;">
+          <option value="">— Seleccionar artista —</option>
+          <option value="__nuevo">✏️ Artista sin contrato (escribir)</option>
+        </select>
+        <input type="text" id="fDesc" placeholder="Nombre del artista..." style="display:none;">
+        <div id="artistaInfoBox" style="display:none;margin-top:8px;background:rgba(8,145,178,0.08);border:1px solid rgba(8,145,178,0.2);border-radius:8px;padding:10px 14px;">
+          <div style="font-size:0.72rem;color:var(--muted);margin-bottom:4px;">CONTRATO ACTIVO</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div id="artistaServicio" style="font-size:0.82rem;font-weight:600;color:var(--text);"></div>
+              <div id="artistaSaldo" style="font-size:0.78rem;color:var(--red);margin-top:2px;"></div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:0.72rem;color:var(--muted);">Cuota mensual</div>
+              <div id="artistaCuota" style="font-size:0.88rem;font-weight:700;color:var(--accent2);"></div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="form-group">
-        <label>Monto (COP)</label>
-        <input type="number" id="fAmount" placeholder="0" min="0">
+        <label>Monto y moneda</label>
+        <div style="display:flex; gap:10px;">
+          <input type="text" id="fAmount" placeholder="0" style="flex:1;" oninput="fmtInput(this);checkConversion()" inputmode="numeric">
+          <select id="fCurrency" style="width:100px; flex-shrink:0;" onchange="checkConversion()">
+            <option value="COP">🇨🇴 COP</option>
+            <option value="USD">🇺🇸 USD</option>
+          </select>
+        </div>
+        <div id="conversionBox" style="display:none;margin-top:8px;background:rgba(8,145,178,0.1);border:1px solid rgba(8,145,178,0.3);border-radius:8px;padding:10px 14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;">Equivalente en pesos colombianos</div>
+              <div id="conversionResult" style="font-family:'Space Grotesk';font-size:1.1rem;font-weight:700;color:var(--accent2);">$0 COP</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:0.7rem;color:var(--muted);">Tasa actual</div>
+              <div id="tasaActual" style="font-size:0.8rem;font-weight:600;color:var(--muted);">Cargando...</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="form-group">
         <label>Categoría</label>
-        <select id="fCat">
+        <select id="fCat" onchange="onCatChange()">
           <option value="">— Seleccionar —</option>
-          <optgroup label="Ingresos">
-            <option>Servicios artísticos</option>
-            <option>Marketing y redes</option>
-            <option>Producción musical</option>
-            <option>Song Mission</option>
-            <option>Publicidad (TikTok Ads)</option>
-            <option>E-commerce (CasaNova)</option>
-            <option>Consultoría</option>
-            <option>Otros ingresos</option>
-          </optgroup>
-          <optgroup label="Gastos">
-            <option>Nómina / Equipo</option>
-            <option>Publicidad pagada</option>
-            <option>Software y suscripciones</option>
-            <option>Producción (grabación / video)</option>
-            <option>Equipos y tecnología</option>
-            <option>Arriendo / Utilities</option>
-            <option>Transporte</option>
-            <option>Comisiones / Plataformas</option>
-            <option>Otros gastos</option>
-          </optgroup>
+          <option>Ruta Integral del Artista de Fe</option>
+          <option>Ruta HIT</option>
+          <option>Ruta CTI</option>
+          <option>Aceleradora de Artistas</option>
+          <option>Servicios de Marketing</option>
+          <option>Distribución Musical</option>
+          <option>Clases de Música</option>
+          <option>Song Mission</option>
+          <option>Comunidad Skool</option>
+          <option>Secuencia</option>
+          <option>Extras de Grabación</option>
         </select>
+      </div>
+
+      <div class="form-group" id="fieldPrograma" style="display:none;">
+        <label>¿Cuál programa / autodébito?</label>
+        <select id="fPrograma">
+          <option value="">— Seleccionar —</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="fieldPago">
+        <label>Medio de pago</label>
+        <input type="text" id="fPayment" placeholder="Ej: PayPal, Western Union, Efectivo, Nequi...">
       </div>
 
       <div class="form-group">
@@ -382,11 +435,14 @@
         <thead>
           <tr>
             <th>Fecha</th>
-            <th>Descripción</th>
+            <th>Artista</th>
             <th>Categoría</th>
+            <th>Tipo de pago</th>
+            <th>Medio de pago</th>
             <th>Tipo</th>
             <th>Quién</th>
             <th style="text-align:right">Monto</th>
+            <th></th>
             <th></th>
           </tr>
         </thead>
@@ -402,25 +458,40 @@
   <!-- PRESUPUESTO -->
   <div class="section" id="presupuesto">
     <div class="section-header">
-      <h2>Presupuesto mensual</h2>
-      <select id="budgetMonth" onchange="renderBudget()" style="width:auto;background:var(--surface);border:1px solid var(--border);padding:8px 14px;border-radius:9px;"></select>
+      <h2>Gastos Fijos de la Empresa</h2>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <select id="budgetMonth" onchange="onBudgetMonthChange()" style="width:auto;background:var(--surface);border:1px solid var(--border);padding:8px 14px;border-radius:9px;"></select>
+        <button class="refresh-btn" onclick="forceCopyBudget()" title="Copiar gastos fijos del mes anterior">↙ Copiar mes anterior</button>
+      </div>
     </div>
 
-    <div class="card" style="margin-bottom: 24px; max-width: 480px;">
-      <div class="card-title">AGREGAR PRESUPUESTO</div>
+    <div style="display:flex; gap:16px; margin-bottom:24px; flex-wrap:wrap; align-items:flex-start;">
+
+    <div class="card" style="max-width: 480px; flex:1; min-width:280px;">
+      <div class="card-title">AGREGAR GASTO FIJO</div>
       <div style="display:flex; gap: 10px; flex-wrap:wrap; align-items:flex-end;">
         <div style="flex:1; min-width:160px;">
           <label>Categoría</label>
-          <select id="bCat">
-            <option>Nómina / Equipo</option>
-            <option>Publicidad pagada</option>
-            <option>Software y suscripciones</option>
-            <option>Producción (grabación / video)</option>
-            <option>Equipos y tecnología</option>
-            <option>Arriendo / Utilities</option>
-            <option>Transporte</option>
-            <option>Comisiones / Plataformas</option>
-            <option>Otros gastos</option>
+          <select id="bCat" onchange="onBudgetCatChange()">
+            <option>Jhonfer</option>
+            <option>Yamid</option>
+            <option>Hugo</option>
+            <option>Alex</option>
+            <option>Músicos</option>
+            <option>Practicantes</option>
+            <option>Arriendo</option>
+            <option>Servicios</option>
+            <option>Internet</option>
+            <option>Aseo</option>
+            <option>Caja Menor</option>
+            <option>Ads CS</option>
+            <option>Ads Clientes</option>
+            <option>Juanpa y Valen</option>
+            <option>Programas</option>
+            <option>Eps</option>
+            <option>Ahorro Inversión</option>
+            <option>Diezmo</option>
+            <option>Deudas</option>
           </select>
         </div>
         <div style="flex:1; min-width:120px;">
@@ -431,10 +502,379 @@
       </div>
     </div>
 
+    <!-- RESUMEN PRESUPUESTO -->
+    <div class="card" style="flex:1; min-width:220px; max-width:280px;">
+      <div class="card-title">RESUMEN DEL MES</div>
+      <div style="margin-bottom:16px;">
+        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:4px;">Total gastos fijos</div>
+        <div id="summaryTotal" style="font-family:'Space Grotesk';font-size:1.6rem;font-weight:700;color:var(--accent2);">$0</div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:4px;">Total pagado</div>
+        <div id="summarySpent" style="font-family:'Space Grotesk';font-size:1.2rem;font-weight:700;color:var(--green);">$0</div>
+      </div>
+      <div style="padding-top:12px;border-top:1px solid var(--border);">
+        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:4px;">Falta por pagar</div>
+        <div id="summaryNeeded" style="font-family:'Space Grotesk';font-size:1.1rem;font-weight:700;color:var(--red);">$0</div>
+      </div>
+    </div>
+
+    </div>
+
+    <!-- PROGRAMAS DESGLOSE -->
+    <div class="card" id="programasCard" style="margin-bottom: 24px; max-width: 480px; display:none;">
+      <div class="card-title">DESGLOSE DE PROGRAMAS</div>
+      <div style="display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; align-items:flex-end;">
+        <div style="flex:1; min-width:160px;">
+          <label>Nombre del programa</label>
+          <input type="text" id="pName" placeholder="Ej: Pro Tools, Adobe, Canva...">
+        </div>
+        <div style="flex:1; min-width:120px;">
+          <label>Costo mensual</label>
+          <input type="number" id="pCost" placeholder="0" min="0">
+        </div>
+        <button class="btn-primary" style="width:auto; padding: 11px 20px; margin-top:0;" onclick="addPrograma()">+ Agregar</button>
+      </div>
+      <div id="programasList"></div>
+      <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:0.8rem; color:var(--muted);">Total programas</span>
+        <span id="programasTotal" style="font-family:'Space Grotesk'; font-size:1.1rem; font-weight:700; color:var(--accent2);">$0</span>
+      </div>
+    </div>
+
     <div class="budget-grid" id="budgetGrid"></div>
+
+    <!-- VARIABLES PORCENTUALES -->
+    <div style="grid-column:1/-1; margin-top:24px;">
+      <div style="padding:10px 16px;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.3);border-radius:10px;margin-bottom:12px;">
+        <span style="font-family:'Space Grotesk';font-weight:600;font-size:0.9rem;color:#fb923c;">📊 Variables (% de lo facturado)</span>
+      </div>
+      <div class="budget-grid">
+        <!-- Diezmo -->
+        <div class="budget-item" style="border-color:rgba(251,146,60,0.2);">
+          <div class="budget-header">
+            <div class="budget-cat" style="color:#fb923c;">Diezmo</div>
+            <div class="budget-amounts">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <input type="number" id="pctDiezmo" value="5" min="0" max="100" style="width:50px;padding:4px 6px;font-size:0.8rem;text-align:center;" onchange="renderVariables()">
+                <span style="color:var(--muted);font-size:0.8rem;">%</span>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:8px;">
+            <div style="font-size:0.75rem;color:var(--muted);margin-bottom:4px;">Corresponde este mes</div>
+            <div id="valDiezmo" style="font-family:'Space Grotesk';font-size:1.1rem;font-weight:700;color:#fb923c;">$0</div>
+          </div>
+          <div style="font-size:0.73rem;color:var(--muted);margin-top:6px;" id="pagoDiezmo">— Sin registrar pago</div>
+        </div>
+        <!-- Ahorro Bóveda -->
+        <div class="budget-item" style="border-color:rgba(251,146,60,0.2);">
+          <div class="budget-header">
+            <div class="budget-cat" style="color:#fb923c;">Ahorro Bóveda</div>
+            <div class="budget-amounts">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <input type="number" id="pctBoveda" value="19" min="0" max="100" style="width:50px;padding:4px 6px;font-size:0.8rem;text-align:center;" onchange="renderVariables()">
+                <span style="color:var(--muted);font-size:0.8rem;">%</span>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:8px;">
+            <div style="font-size:0.75rem;color:var(--muted);margin-bottom:4px;">Corresponde este mes</div>
+            <div id="valBoveda" style="font-family:'Space Grotesk';font-size:1.1rem;font-weight:700;color:#fb923c;">$0</div>
+          </div>
+          <div style="font-size:0.73rem;color:var(--muted);margin-top:6px;" id="pagoBoveda">— Sin registrar pago</div>
+        </div>
+      </div>
+    </div>
+
     <div id="budgetEmpty" class="empty-state" style="display:none">
       <div class="emoji">🎯</div>
-      <div>Agrega un presupuesto para empezar</div>
+      <div>Agrega tus gastos fijos para empezar</div>
+    </div>
+  </div>
+  <!-- CLIENTES -->
+  <div class="section" id="clientes">
+    <div class="section-header">
+      <h2>Artistas</h2>
+      <button class="btn-primary" style="width:auto;padding:9px 20px;" onclick="showClienteForm()">+ Nuevo artista</button>
+    </div>
+
+    <!-- BUSCADOR GENERAL -->
+    <div style="margin-bottom:12px;">
+      <input type="text" id="clienteSearch" placeholder="🔍 Buscar por nombre, correo, teléfono, nombre artístico, ID..." oninput="renderClientes()" style="width:100%;">
+    </div>
+
+    <!-- FILTROS COMBINABLES -->
+    <div class="filter-row" style="margin-bottom:20px;flex-wrap:wrap;gap:8px;">
+      <select id="filterEstadoPago" onchange="renderClientes()" style="flex:1;min-width:130px;">
+        <option value="">💳 Todos los pagos</option>
+        <option value="aldia">Al día</option>
+        <option value="mora">En mora</option>
+      </select>
+      <select id="filterEstadoCliente" onchange="renderClientes()" style="flex:1;min-width:140px;">
+        <option value="">📋 Todos los estados</option>
+        <option value="activo">Activo</option>
+        <option value="pausado">Pausado</option>
+        <option value="terminado">Terminado</option>
+        <option value="listo">Listo para publicar</option>
+      </select>
+      <select id="filterPais" onchange="renderClientes()" style="flex:1;min-width:130px;">
+        <option value="">🌎 Todos los países</option>
+      </select>
+      <button class="refresh-btn" onclick="limpiarFiltros()" style="white-space:nowrap;">✕ Limpiar filtros</button>
+    </div>
+
+    <!-- STATS RÁPIDOS -->
+    <div class="kpi-row" style="margin-bottom:24px;">
+      <div class="kpi">
+        <div class="kpi-label">Clientes activos</div>
+        <div class="kpi-value purple" id="statActivos">0</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">En mora</div>
+        <div class="kpi-value red" id="statMora">0</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">En mora — cuotas vencidas</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">
+          <div>
+            <div style="font-size:0.68rem;color:var(--muted);font-weight:600;letter-spacing:0.06em;margin-bottom:2px;">🇨🇴 PESO COLOMBIANO</div>
+            <div class="kpi-value red" id="statCartera" style="font-size:1.5rem;">$0</div>
+          </div>
+          <div>
+            <div style="font-size:0.68rem;color:var(--muted);font-weight:600;letter-spacing:0.06em;margin-bottom:2px;">🇺🇸 DÓLAR</div>
+            <div class="kpi-value red" id="statCarteraUSD" style="font-size:1.5rem;">USD $0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LISTA DE CLIENTES -->
+    <div id="clientesList"></div>
+
+    <!-- FORMULARIO NUEVO/EDITAR CLIENTE -->
+    <div id="clienteFormModal" style="display:none;">
+      <div style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--card-radius);padding:32px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+            <div class="form-title" style="margin:0;" id="clienteFormTitle">Nuevo artista</div>
+            <button onclick="closeClienteForm()" style="background:none;border:none;color:var(--muted);font-size:1.4rem;cursor:pointer;">✕</button>
+          </div>
+
+          <div style="font-size:0.8rem;font-weight:600;color:var(--accent2);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px;">Datos personales</div>
+          <div class="form-group">
+            <label>Nombre completo</label>
+            <input type="text" id="cNombre" placeholder="Ej: José Martínez">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group">
+              <label>Nombre artístico</label>
+              <input type="text" id="cNombreArt" placeholder="Ej: Halel, Luz y Vida...">
+            </div>
+            <div class="form-group">
+              <label>N° de identificación</label>
+              <input type="text" id="cIdentificacion" placeholder="Cédula, pasaporte...">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group">
+              <label>Correo</label>
+              <input type="email" id="cCorreo" placeholder="correo@gmail.com">
+            </div>
+            <div class="form-group">
+              <label>País</label>
+              <input type="text" id="cPais" placeholder="Colombia">
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group">
+              <label>Cumpleaños (artista 1)</label>
+              <input type="date" id="cCumple">
+            </div>
+            <div class="form-group">
+              <label>Cumpleaños (artista 2 — si es dúo)</label>
+              <input type="date" id="cCumple2">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>WhatsApp</label>
+            <div style="display:flex;gap:8px;">
+              <select id="cPaisCodigo" style="width:180px;flex-shrink:0;">
+                <option value="+57">🇨🇴 Colombia +57</option>
+                <option value="+1">🇺🇸 USA +1</option>
+                <option value="+52">🇲🇽 México +52</option>
+                <option value="+54">🇦🇷 Argentina +54</option>
+                <option value="+56">🇨🇱 Chile +56</option>
+                <option value="+51">🇵🇪 Perú +51</option>
+                <option value="+58">🇻🇪 Venezuela +58</option>
+                <option value="+593">🇪🇨 Ecuador +593</option>
+                <option value="+503">🇸🇻 El Salvador +503</option>
+                <option value="+502">🇬🇹 Guatemala +502</option>
+                <option value="+504">🇭🇳 Honduras +504</option>
+                <option value="+505">🇳🇮 Nicaragua +505</option>
+                <option value="+506">🇨🇷 Costa Rica +506</option>
+                <option value="+507">🇵🇦 Panamá +507</option>
+                <option value="+509">🇭🇹 Haiti +509</option>
+                <option value="+1-809">🇩🇴 Rep. Dom. +1809</option>
+                <option value="+53">🇨🇺 Cuba +53</option>
+                <option value="+591">🇧🇴 Bolivia +591</option>
+                <option value="+595">🇵🇾 Paraguay +595</option>
+                <option value="+598">🇺🇾 Uruguay +598</option>
+                <option value="+55">🇧🇷 Brasil +55</option>
+                <option value="+34">🇪🇸 España +34</option>
+                <option value="+1-CA">🇨🇦 Canadá +1</option>
+              </select>
+              <input type="text" id="cWhatsapp" placeholder="300 000 0000" style="flex:1;">
+            </div>
+          </div>
+
+          <div style="font-size:0.8rem;font-weight:600;color:var(--accent2);letter-spacing:0.06em;text-transform:uppercase;margin:20px 0 12px;">Contrato</div>
+          <div class="form-group">
+            <label>Servicio</label>
+            <select id="cServicio">
+              <option>Ruta Integral del Artista de Fe</option>
+              <option>Ruta HIT</option>
+              <option>Ruta CTI</option>
+              <option>Aceleradora de Artistas</option>
+              <option>Servicios de Marketing</option>
+              <option>Distribución Musical</option>
+              <option>Clases de Música</option>
+              <option>Song Mission</option>
+              <option>Comunidad Skool</option>
+              <option>Secuencia</option>
+              <option>Extras de Grabación</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Moneda del contrato</label>
+            <select id="cMoneda">
+              <option value="COP">🇨🇴 Peso colombiano (COP)</option>
+              <option value="USD">🇺🇸 Dólar (USD)</option>
+            </select>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group">
+              <label>N° de canciones</label>
+              <input type="number" id="cCanciones" placeholder="0" min="0" oninput="calcTotal()">
+            </div>
+            <div class="form-group">
+              <label>Valor por canción</label>
+              <input type="text" id="cValorCancion" placeholder="0" oninput="fmtInput(this);calcTotal()" inputmode="numeric">
+              <div class="amount-display" id="previewValorCancion"></div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Total del contrato</label>
+            <input type="text" id="cTotal" placeholder="0" style="font-weight:600;color:var(--accent2);" oninput="fmtInput(this)" inputmode="numeric">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group">
+              <label>Cuota inicial pagada</label>
+              <input type="text" id="cInicial" placeholder="0" oninput="fmtInput(this)" inputmode="numeric">
+            </div>
+            <div class="form-group">
+              <label>Medio de pago inicial</label>
+              <input type="text" id="cInicialMedio" placeholder="Ej: Nequi, PayPal, Efectivo...">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group">
+              <label>Valor de la cuota mensual</label>
+              <input type="text" id="cCuota" placeholder="0" oninput="fmtInput(this)" inputmode="numeric">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group">
+              <label>Día de pago (del mes)</label>
+              <input type="number" id="cDiaPago" placeholder="15" min="1" max="31">
+            </div>
+            <div class="form-group">
+              <label>Fecha inicio contrato</label>
+              <input type="date" id="cFechaInicio">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Estado</label>
+            <select id="cEstado">
+              <option value="activo">Activo</option>
+              <option value="pausado">Pausado</option>
+              <option value="terminado">Terminado</option>
+              <option value="listo">Listo para publicar</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Notas</label>
+            <textarea id="cNotas" rows="2" placeholder="Información adicional..."></textarea>
+          </div>
+          <input type="hidden" id="cId">
+          <button class="btn-primary" onclick="saveCliente()">Guardar cliente</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- FICHA CLIENTE -->
+    <div id="clienteFichaModal" style="display:none;">
+      <div style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--card-radius);padding:32px;width:100%;max-width:620px;max-height:90vh;overflow-y:auto;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;">
+            <div>
+              <div id="fichaName" style="font-family:'Space Grotesk';font-size:1.4rem;font-weight:700;"></div>
+              <div id="fichaService" style="color:var(--muted);font-size:0.85rem;margin-top:4px;"></div>
+            </div>
+            <button onclick="closeFicha()" style="background:none;border:none;color:var(--muted);font-size:1.4rem;cursor:pointer;">✕</button>
+          </div>
+
+          <!-- Stats del contrato -->
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;" id="fichaStats"></div>
+
+          <!-- Barra de progreso -->
+          <div style="margin-bottom:24px;">
+            <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:var(--muted);margin-bottom:6px;">
+              <span>Progreso del contrato</span>
+              <span id="fichaPct">0%</span>
+            </div>
+            <div class="progress-bar" style="height:10px;">
+              <div id="fichaBar" class="progress-fill" style="width:0%;background:var(--accent2);"></div>
+            </div>
+          </div>
+
+          <!-- Info personal -->
+          <div id="fichaInfo" style="margin-bottom:24px;"></div>
+
+          <!-- Registrar pago -->
+          <div style="background:var(--surface2);border-radius:10px;padding:16px;margin-bottom:24px;">
+            <div style="font-size:0.8rem;font-weight:600;color:var(--accent2);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px;">Registrar nuevo pago</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+              <div style="flex:1;min-width:120px;">
+                <label>Monto</label>
+                <input type="text" id="pagoMonto" placeholder="0" oninput="fmtInput(this)" inputmode="numeric">
+              </div>
+              <div style="flex:1;min-width:120px;">
+                <label>Fecha</label>
+                <input type="date" id="pagoFecha">
+              </div>
+              <div style="flex:1;min-width:120px;">
+                <label>Medio de pago</label>
+                <input type="text" id="pagoMedio" placeholder="Nequi, PayPal...">
+              </div>
+              <button class="btn-primary" style="width:auto;padding:11px 20px;" onclick="registrarPago()">+ Registrar</button>
+            </div>
+          </div>
+
+          <!-- Historial de pagos -->
+          <div>
+            <div style="font-size:0.8rem;font-weight:600;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px;">Historial de pagos</div>
+            <div id="fichaPagos"></div>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:20px;">
+            <button class="refresh-btn" onclick="editCliente(currentClienteId)" style="flex:1;text-align:center;">✏️ Editar</button>
+            <button class="refresh-btn" onclick="deleteCliente(currentClienteId)" style="flex:1;text-align:center;color:var(--red);border-color:rgba(248,113,113,0.3);">🗑 Eliminar cliente</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -461,7 +901,10 @@ const savedWho = localStorage.getItem('cs_who');
 if (savedWho) document.getElementById('whoSelect').value = savedWho;
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
-const fmt = n => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
+const fmt = (n, currency = 'COP') => {
+  const num = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(n);
+  return currency === 'USD' ? 'USD $' + num : '$' + num;
+};
 
 function currentMonth() {
   const d = new Date();
@@ -517,6 +960,7 @@ async function loadData() {
     })).filter(t => t.id).reverse();
     setSyncStatus('ok');
     populateMonthSelectors();
+    populateArtistaSelect();
     renderDashboard();
     renderTable();
     renderBudget();
@@ -553,31 +997,84 @@ function showSection(id) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   document.querySelectorAll('nav button').forEach((b,i) => {
-    b.classList.toggle('active', ['dashboard','registro','movimientos','presupuesto'][i] === id);
+    b.classList.toggle('active', ['dashboard','registro','movimientos','presupuesto','clientes'][i] === id);
   });
   populateMonthSelectors();
   if (id === 'dashboard') renderDashboard();
   if (id === 'movimientos') renderTable();
   if (id === 'presupuesto') renderBudget();
+  if (id === 'clientes') renderClientes();
 }
 
 // ─── TYPE TOGGLE ─────────────────────────────────────────────────────────────
+const INCOME_CATS = [
+  'Ruta Integral del Artista de Fe','Ruta HIT','Ruta CTI',
+  'Aceleradora de Artistas','Servicios de Marketing','Distribución Musical',
+  'Clases de Música','Song Mission','Comunidad Skool','Secuencia','Extras de Grabación'
+];
+
+const EXPENSE_CATS = [
+  'Jhonfer','Yamid','Hugo','Alex','Músicos','Practicantes',
+  'Arriendo','Servicios','Internet','Aseo',
+  'Caja Menor','Ads CS','Ads Clientes','Juanpa y Valen',
+  'Programas','Eps','Diezmo','Ahorro Bóveda','Ahorro Inversión'
+];
+
+function onCatChange() {
+  const cat = document.getElementById('fCat').value;
+  const show = cat === 'Programas' && selectedType === 'expense';
+  document.getElementById('fieldPrograma').style.display = show ? 'block' : 'none';
+  if (show) {
+    // Poblar con programas del presupuesto del mes actual
+    const month = currentMonth();
+    const progs = budgets[month]?.['_programas'] || {};
+    const sel = document.getElementById('fPrograma');
+    const names = Object.keys(progs);
+    if (names.length) {
+      sel.innerHTML = '<option value="">— Seleccionar programa —</option>' +
+        names.map(n => `<option>${n}</option>`).join('') +
+        '<option value="__otro">Otro (escribir)</option>';
+    } else {
+      sel.innerHTML = '<option value="">— Sin programas en presupuesto —</option><option value="__otro">Escribir manualmente</option>';
+    }
+  } else {
+    document.getElementById('fPrograma').value = '';
+  }
+}
+
 function selectType(t) {
   selectedType = t;
   document.getElementById('btnIncome').classList.toggle('selected', t==='income');
   document.getElementById('btnExpense').classList.toggle('selected', t==='expense');
+  const cats = t === 'income' ? INCOME_CATS : EXPENSE_CATS;
+  const sel = document.getElementById('fCat');
+  sel.innerHTML = '<option value="">— Seleccionar —</option>' + cats.map(c => `<option>${c}</option>`).join('');
+  document.getElementById('fieldArtista').style.display = t === 'income' ? 'block' : 'none';
+  document.getElementById('fieldPago').style.display = t === 'income' ? 'block' : 'none';
+  document.getElementById('fieldPrograma').style.display = 'none';
+  document.getElementById('fPrograma').value = '';
+  if (t === 'expense') {
+    document.getElementById('fDesc').value = 'Gasto';
+    document.getElementById('fPayment').value = '';
+  } else {
+    document.getElementById('fDesc').value = '';
+  }
 }
 
 // ─── ADD TRANSACTION ─────────────────────────────────────────────────────────
 async function addTransaction() {
-  const desc = document.getElementById('fDesc').value.trim();
-  const amount = parseFloat(document.getElementById('fAmount').value);
+  const desc = selectedType === 'income' ? getArtistaDesc() : 'Gasto';
+  const amount = parseAmt('fAmount');
+  const currency = document.getElementById('fCurrency').value;
   const cat = document.getElementById('fCat').value;
+  const payment = selectedType === 'income' ? document.getElementById('fPayment').value.trim() : '';
+  const programaRaw = document.getElementById('fPrograma').value;
+  const programa = (selectedType === 'expense' && cat === 'Programas') ? (programaRaw === '__otro' ? '' : programaRaw) : '';
   const date = document.getElementById('fDate').value;
   const note = document.getElementById('fNote').value.trim();
   const who = getWho();
 
-  if (!desc || !amount || !cat || !date) {
+  if ((selectedType === 'income' && !desc) || !amount || !cat || !date) {
     showToast('Completa todos los campos requeridos.', 'error');
     return;
   }
@@ -586,18 +1083,50 @@ async function addTransaction() {
   btn.disabled = true;
   btn.textContent = 'Guardando...';
 
-  const tx = { id: Date.now(), type: selectedType, desc, amount, cat, date, note, who };
+  // Si es USD, guardar la tasa del día con la transacción
+  let tasaDia = null;
+  let amountCOP = amount;
+  if (currency === 'USD') {
+    tasaDia = await fetchTasa();
+    amountCOP = Math.round(amount * tasaDia);
+  }
+
+  const tx = { id: Date.now(), type: selectedType, desc, amount, currency, amountCOP, tasaDia, cat, programa, payment, date, note, who };
 
   try {
     await saveTransaction(tx);
     transactions.unshift(tx);
+
+    // Si es ingreso de un artista registrado, abonarlo a su contrato
+    const selVal = document.getElementById('fDescSelect')?.value;
+    if (selectedType === 'income' && selVal && selVal !== '__nuevo') {
+      const c = clientes.find(x => x.id === selVal);
+      if (c && getSaldoPendiente(c) > 0) {
+        const numRecibo = 'CS-' + Date.now().toString().slice(-6);
+        const pago = { id: Date.now().toString(), monto: amount, fecha: tx.date, medio: tx.payment || '', registradoPor: getWho(), numRecibo };
+        c.pagos = c.pagos || [];
+        c.pagos.push(pago);
+        saveClientes();
+        // Generar recibo automáticamente
+        setTimeout(() => generarRecibo(c, pago, c.pagos.length === 1), 500);
+      }
+    }
+
     populateMonthSelectors();
     renderDashboard();
     renderTable();
 
     document.getElementById('fDesc').value = '';
+    document.getElementById('fDesc').style.display = 'none';
+    if(document.getElementById('fDescSelect')) document.getElementById('fDescSelect').value = '';
+    if(document.getElementById('artistaInfoBox')) document.getElementById('artistaInfoBox').style.display = 'none';
     document.getElementById('fAmount').value = '';
+    document.getElementById('fPayment').value = '';
+    document.getElementById('fPrograma').value = '';
+    document.getElementById('fieldPrograma').style.display = 'none';
     document.getElementById('fNote').value = '';
+    const cb = document.getElementById('conversionBox');
+    if (cb) cb.style.display = 'none';
 
     showToast(`✓ Transacción guardada por ${who}`);
   } catch(e) {
@@ -626,17 +1155,25 @@ async function deleteTransaction(id) {
 function renderDashboard() {
   const month = document.getElementById('dashMonth')?.value || currentMonth();
   const monthly = transactions.filter(t => t.date && t.date.startsWith(month));
-  const income = monthly.filter(t => t.type==='income').reduce((s,t) => s+t.amount, 0);
-  const expense = monthly.filter(t => t.type==='expense').reduce((s,t) => s+t.amount, 0);
-  const balance = income - expense;
 
-  document.getElementById('kpiIncome').textContent = fmt(income);
+  const incomeCOP = monthly.filter(t => t.type==='income' && (t.currency||'COP')==='COP').reduce((s,t)=>s+t.amount,0);
+  const incomeUSD = monthly.filter(t => t.type==='income' && t.currency==='USD').reduce((s,t)=>s+t.amount,0);
+  // Usar amountCOP guardado (tasa del día) o convertir con tasa actual como fallback
+  const incomeUSDenCOP = monthly.filter(t => t.type==='income' && t.currency==='USD').reduce((s,t)=>s+(t.amountCOP || convertirACOP(t.amount,'USD')),0);
+  const expense = monthly.filter(t => t.type==='expense').reduce((s,t) => s+t.amount, 0);
+  const balance = incomeCOP + incomeUSDenCOP - expense;
+
+  document.getElementById('kpiIncome').textContent = fmt(incomeCOP);
+  document.getElementById('kpiIncomeUSD').textContent = fmt(incomeUSD, 'USD');
   document.getElementById('kpiExpense').textContent = fmt(expense);
   document.getElementById('kpiBalance').textContent = fmt(balance);
   document.getElementById('kpiBalance').className = 'kpi-value ' + (balance >= 0 ? 'purple' : 'red');
   document.getElementById('kpiIncomeCount').textContent = monthly.filter(t=>t.type==='income').length + ' transacciones';
   document.getElementById('kpiExpenseCount').textContent = monthly.filter(t=>t.type==='expense').length + ' transacciones';
-  document.getElementById('kpiBalanceSub').textContent = balance >= 0 ? 'Estás en positivo 👍' : 'Gastos superan ingresos ⚠️';
+  const tasaFecha = localStorage.getItem('cs_tasa_fecha') || '';
+  document.getElementById('kpiBalanceSub').textContent = balance >= 0
+    ? `Positivo 👍 ${tasaUSD ? '· Tasa: '+fmt(tasaUSD)+'/USD' : ''}`
+    : `Gastos superan ingresos ⚠️`;
 
   renderBarChart();
   renderPieChart(month);
@@ -686,7 +1223,7 @@ function renderPieChart(month) {
   expenses.forEach(t => { catMap[t.cat] = (catMap[t.cat]||0) + t.amount; });
   const cats = Object.keys(catMap);
   const values = Object.values(catMap);
-  const colors = ['#7c6af7','#a78bfa','#34d399','#fbbf24','#f87171','#60a5fa','#f472b6','#34d399','#fb923c'];
+  const colors = ['#0891b2','#22d3ee','#34d399','#fbbf24','#f87171','#60a5fa','#f472b6','#34d399','#fb923c'];
 
   if (pieChartInst) pieChartInst.destroy();
   if (!cats.length) { document.getElementById('pieChart').style.display='none'; return; }
@@ -713,7 +1250,7 @@ function renderRecent() {
       <div class="tx-icon ${t.type}">${t.type==='income'?'↑':'↓'}</div>
       <div class="tx-info">
         <div class="tx-name">${t.desc}</div>
-        <div class="tx-meta">${t.cat} · ${t.date} · <span style="color:var(--accent2)">${t.who||''}</span></div>
+        <div class="tx-meta">${t.cat} · ${t.date} · <span style="color:var(--accent2)">${t.who||''}</span>${t.payment === 'Cuota inicial' ? ` · <span style="color:var(--green);font-weight:600">Cuota inicial</span>` : ''}</div>
       </div>
       <div class="tx-amount ${t.type}">${t.type==='income'?'+':'-'}${fmt(t.amount)}</div>
     </div>
@@ -748,12 +1285,22 @@ function renderTable() {
           <div style="font-weight:500">${t.desc}</div>
           ${t.note ? `<div style="font-size:0.75rem;color:var(--muted);margin-top:2px">${t.note}</div>` : ''}
         </td>
-        <td style="color:var(--muted);font-size:0.8rem">${t.cat}</td>
+        <td style="color:var(--muted);font-size:0.8rem">${t.cat}${t.programa ? ` · <span style="color:var(--accent2)">${t.programa}</span>` : ''}</td>
+        <td>
+          ${t.tipoPago === 'Cuota inicial'
+            ? `<span class="badge income">Cuota inicial</span>`
+            : t.type === 'income'
+            ? `<span class="badge" style="background:rgba(8,145,178,0.15);color:var(--accent2);">Abono</span>`
+            : '—'}
+        </td>
+        <td style="color:var(--muted);font-size:0.8rem">${t.payment||'—'}</td>
         <td><span class="badge ${t.type}">${t.type==='income'?'Ingreso':'Gasto'}</span></td>
         <td><span class="who-badge">${t.who||'—'}</span></td>
         <td style="text-align:right;font-family:'Space Grotesk';font-weight:600">
-          <span style="color:${t.type==='income'?'var(--green)':'var(--red)'}">${t.type==='income'?'+':'-'}${fmt(t.amount)}</span>
+          <span style="color:${t.type==='income'?'var(--green)':'var(--red)'}">${t.type==='income'?'+':'-'}${fmt(t.amount, t.currency||'COP')}</span>
+          ${t.currency==='USD' && t.tasaDia ? `<div style="font-size:0.68rem;color:var(--muted);">≈ ${fmt(t.amountCOP||0)} · @${fmt(t.tasaDia)}</div>` : ''}
         </td>
+        <td><button class="refresh-btn" style="padding:4px 8px;font-size:0.75rem;" title="Ver recibo" onclick="generarReciboMovimiento('${t.id}')">🧾</button></td>
         <td><button class="delete-btn" onclick="deleteTransaction('${t.id}')">✕</button></td>
       </tr>
     `).join('');
@@ -766,6 +1313,177 @@ function renderTable() {
 }
 
 // ─── BUDGET ──────────────────────────────────────────────────────────────────
+function forceCopyBudget() {
+  const month = document.getElementById('budgetMonth').value || currentMonth();
+  const copied = copyBudgetFromPrevMonth(month);
+  if (copied) {
+    showToast('✓ Gastos fijos copiados del mes anterior');
+    renderBudget();
+  } else {
+    showToast('No hay gastos fijos en el mes anterior.', 'error');
+  }
+}
+
+function populateArtistaSelect() {
+  const sel = document.getElementById('fDescSelect');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— Seleccionar artista —</option>' +
+    clientes.filter(c => c.estado === 'activo' || c.estado === 'pausado')
+      .map(c => `<option value="${c.id}">${c.nombre}${c.pais ? ' ('+c.pais+')' : ''}</option>`)
+      .join('') +
+    '<option value="__nuevo">✏️ Artista sin contrato (escribir)</option>';
+  if (cur) sel.value = cur;
+}
+
+function onArtistaSelect() {
+  const sel = document.getElementById('fDescSelect');
+  const val = sel.value;
+  const input = document.getElementById('fDesc');
+  const infoBox = document.getElementById('artistaInfoBox');
+
+  if (val === '__nuevo') {
+    input.style.display = 'block';
+    input.placeholder = 'Nombre del artista...';
+    input.value = '';
+    input.focus();
+    infoBox.style.display = 'none';
+  } else if (val) {
+    input.style.display = 'none';
+    infoBox.style.display = 'block';
+    const c = clientes.find(x => x.id === val);
+    if (c) {
+      document.getElementById('artistaServicio').textContent = c.servicio;
+      document.getElementById('artistaSaldo').textContent = 'Saldo pendiente: ' + fmt(getSaldoPendiente(c), c.moneda);
+      document.getElementById('artistaCuota').textContent = fmt(c.cuota || 0, c.moneda);
+      // Auto-set currency
+      document.getElementById('fCurrency').value = c.moneda || 'COP';
+      // Auto-set category to artist's service
+      const catSel = document.getElementById('fCat');
+      if (catSel) {
+        const opt = [...catSel.options].find(o => o.value === c.servicio);
+        if (opt) catSel.value = c.servicio;
+      }
+      // Auto-set amount to cuota if empty
+      if (!document.getElementById('fAmount').value && c.cuota) {
+        document.getElementById('fAmount').value = new Intl.NumberFormat('es-CO').format(c.cuota);
+        checkConversion();
+      }
+    }
+  } else {
+    input.style.display = 'none';
+    infoBox.style.display = 'none';
+  }
+}
+
+function getArtistaDesc() {
+  const sel = document.getElementById('fDescSelect');
+  const val = sel?.value;
+  if (val === '__nuevo') return document.getElementById('fDesc').value.trim();
+  if (val) {
+    const c = clientes.find(x => x.id === val);
+    return c ? c.nombre : '';
+  }
+  return document.getElementById('fDesc').value.trim();
+}
+
+function onBudgetCatChange() {
+  const cat = document.getElementById('bCat').value;
+  const card = document.getElementById('programasCard');
+  card.style.display = cat === 'Programas' ? 'block' : 'none';
+  if (cat === 'Programas') renderProgramasList();
+}
+
+function addPrograma() {
+  const name = document.getElementById('pName').value.trim();
+  const cost = parseFloat(document.getElementById('pCost').value);
+  if (!name || !cost) { showToast('Completa nombre y costo.', 'error'); return; }
+  const month = document.getElementById('budgetMonth').value || currentMonth();
+  if (!budgets[month]) budgets[month] = {};
+  if (!budgets[month]['_programas']) budgets[month]['_programas'] = {};
+  budgets[month]['_programas'][name] = cost;
+  // Auto-update total de Programas
+  const total = Object.values(budgets[month]['_programas']).reduce((s,v) => s+v, 0);
+  budgets[month]['Programas'] = total;
+  localStorage.setItem('cs_budgets', JSON.stringify(budgets));
+  document.getElementById('pName').value = '';
+  document.getElementById('pCost').value = '';
+  renderProgramasList();
+  renderBudget();
+  showToast(`✓ ${name} agregado`);
+}
+
+function deletePrograma(name) {
+  const month = document.getElementById('budgetMonth').value || currentMonth();
+  if (!budgets[month]?.['_programas']) return;
+  delete budgets[month]['_programas'][name];
+  const total = Object.values(budgets[month]['_programas']).reduce((s,v) => s+v, 0);
+  budgets[month]['Programas'] = total || 0;
+  localStorage.setItem('cs_budgets', JSON.stringify(budgets));
+  renderProgramasList();
+  renderBudget();
+}
+
+function renderProgramasList() {
+  const month = document.getElementById('budgetMonth').value || currentMonth();
+  const progs = budgets[month]?.['_programas'] || {};
+  const list = document.getElementById('programasList');
+  const total = Object.values(progs).reduce((s,v) => s+v, 0);
+  document.getElementById('programasTotal').textContent = fmt(total);
+  if (!Object.keys(progs).length) {
+    list.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:8px 0;">Sin programas agregados aún.</div>';
+    return;
+  }
+  list.innerHTML = Object.entries(progs).map(([name, cost]) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:0.88rem;">${name}</span>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-family:'Space Grotesk';font-weight:600;color:var(--red);">${fmt(cost)}</span>
+        <button class="delete-btn" onclick="deletePrograma('${name}')">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function saveInversion() {
+  localStorage.setItem('cs_inversion', document.getElementById('montoInversion').value);
+}
+
+function renderVariables() {
+  const month = document.getElementById('budgetMonth')?.value || currentMonth();
+  const totalIngresos = transactions.filter(t => t.type==='income' && t.date && t.date.startsWith(month)).reduce((s,t)=>s+t.amount,0);
+
+  const pctDiezmo = parseFloat(document.getElementById('pctDiezmo')?.value||5)/100;
+  const pctBoveda = parseFloat(document.getElementById('pctBoveda')?.value||19)/100;
+
+  const valDiezmo = totalIngresos * pctDiezmo;
+  const valBoveda = totalIngresos * pctBoveda;
+
+  if (document.getElementById('valDiezmo')) document.getElementById('valDiezmo').textContent = fmt(valDiezmo);
+  if (document.getElementById('valBoveda')) document.getElementById('valBoveda').textContent = fmt(valBoveda);
+
+  const pagoDiezmo = transactions.filter(t => t.type==='expense' && t.cat==='Diezmo' && t.date && t.date.startsWith(month)).reduce((s,t)=>s+t.amount,0);
+  const pagoBoveda = transactions.filter(t => t.type==='expense' && t.cat==='Ahorro Bóveda' && t.date && t.date.startsWith(month)).reduce((s,t)=>s+t.amount,0);
+
+  if (document.getElementById('pagoDiezmo')) {
+    const el = document.getElementById('pagoDiezmo');
+    el.innerHTML = pagoDiezmo > 0
+      ? `<span style="color:var(--green)">✓ Pagado: ${fmt(pagoDiezmo)}</span>${pagoDiezmo < valDiezmo ? ` · Falta: ${fmt(valDiezmo-pagoDiezmo)}` : ''}`
+      : `<span style="color:var(--red)">○ Pendiente: ${fmt(valDiezmo)}</span>`;
+  }
+  if (document.getElementById('pagoBoveda')) {
+    const el = document.getElementById('pagoBoveda');
+    el.innerHTML = pagoBoveda > 0
+      ? `<span style="color:var(--green)">✓ Pagado: ${fmt(pagoBoveda)}</span>${pagoBoveda < valBoveda ? ` · Falta: ${fmt(valBoveda-pagoBoveda)}` : ''}`
+      : `<span style="color:var(--red)">○ Pendiente: ${fmt(valBoveda)}</span>`;
+  }
+
+  localStorage.setItem('cs_pct', JSON.stringify({
+    diezmo: document.getElementById('pctDiezmo')?.value,
+    boveda: document.getElementById('pctBoveda')?.value
+  }));
+}
+
 function addBudget() {
   const cat = document.getElementById('bCat').value;
   const amount = parseFloat(document.getElementById('bAmount').value);
@@ -776,50 +1494,885 @@ function addBudget() {
   localStorage.setItem('cs_budgets', JSON.stringify(budgets));
   renderBudget();
   document.getElementById('bAmount').value = '';
-  showToast('Presupuesto guardado.');
+  showToast('Gasto fijo guardado.');
+}
+
+function copyBudgetFromPrevMonth(month) {
+  // Obtener mes anterior
+  const [y, m] = month.split('-').map(Number);
+  const prevDate = new Date(y, m - 2, 1);
+  const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth()+1).padStart(2,'0')}`;
+  const prev = budgets[prevMonth];
+  if (!prev || !Object.keys(prev).length) return false;
+  // Copiar todo excepto pagos
+  budgets[month] = JSON.parse(JSON.stringify(prev));
+  localStorage.setItem('cs_budgets', JSON.stringify(budgets));
+  return true;
+}
+
+function onBudgetMonthChange() {
+  const month = document.getElementById('budgetMonth').value || currentMonth();
+  // Si el mes no tiene presupuesto definido, copiar del mes anterior
+  const mb = budgets[month];
+  const hasData = mb && Object.keys(mb).filter(k => !k.startsWith('_')).length > 0;
+  if (!hasData) {
+    const copied = copyBudgetFromPrevMonth(month);
+    if (copied) showToast('✓ Gastos fijos copiados del mes anterior');
+  }
+  renderBudget();
+  if (document.getElementById('programasCard').style.display !== 'none') renderProgramasList();
 }
 
 function renderBudget() {
   const month = document.getElementById('budgetMonth')?.value || currentMonth();
   const mb = budgets[month] || {};
-  const cats = Object.keys(mb);
   const grid = document.getElementById('budgetGrid');
   const empty = document.getElementById('budgetEmpty');
-
-  if (!cats.length) { grid.innerHTML = ''; empty.style.display = 'block'; return; }
   empty.style.display = 'none';
 
-  grid.innerHTML = cats.map(cat => {
-    const limit = mb[cat];
+  const GRUPOS = {
+    'Equipo': {
+      cats: ['Jhonfer','Yamid','Hugo','Alex','Músicos','Practicantes','Juanpa y Valen'],
+      color: '#22d3ee', bg: 'rgba(34,211,238,0.08)', border: 'rgba(34,211,238,0.3)', label: '👥 Equipo'
+    },
+    'Sede': {
+      cats: ['Arriendo','Servicios','Internet','Aseo'],
+      color: '#60a5fa', bg: 'rgba(96,165,250,0.08)', border: 'rgba(96,165,250,0.3)', label: '🏢 Sede'
+    },
+    'Publicidad': {
+      cats: ['Ads CS','Ads Clientes'],
+      color: '#fbbf24', bg: 'rgba(251,191,36,0.08)', border: 'rgba(251,191,36,0.3)', label: '📣 Publicidad'
+    },
+    'Otros': {
+      cats: ['Caja Menor','Programas','Eps','Ahorro Inversión'],
+      color: '#34d399', bg: 'rgba(52,211,153,0.08)', border: 'rgba(52,211,153,0.3)', label: '📦 Otros'
+    }
+  };
+
+  const buildCard = (cat, groupColor) => {
+    const limit = mb[cat] || 0;
     const spent = transactions.filter(t => t.type==='expense' && t.cat===cat && t.date && t.date.startsWith(month)).reduce((s,t)=>s+t.amount,0);
-    const pct = Math.min((spent/limit)*100, 100);
-    const color = pct > 90 ? 'var(--red)' : pct > 70 ? 'var(--yellow)' : 'var(--green)';
+    const pct = limit > 0 ? (spent/limit)*100 : 0;
+    const pctCapped = Math.min(pct, 100);
+    const barColor = pct > 100 ? 'var(--red)' : pct >= 100 ? 'var(--green)' : pct > 70 ? 'var(--yellow)' : groupColor;
+    const statusText = pct > 100
+      ? `<span style="color:var(--red)">⚠ Excedido por ${fmt(spent-limit)}</span>`
+      : pct >= 100
+      ? `<span style="color:var(--green)">✓ Completado</span>`
+      : `Disponible: ${fmt(limit-spent)}`;
+    const progDesglose = cat === 'Programas' && mb['_programas'] && Object.keys(mb['_programas']).length
+      ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
+          ${Object.entries(mb['_programas']).map(([n,c]) => {
+            const pagado = transactions.some(t =>
+              t.type==='expense' && t.cat==='Programas' &&
+              t.programa === n && t.date && t.date.startsWith(month)
+            );
+            return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.75rem;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:0.85rem;">${pagado ? '✓' : '○'}</span>
+                <span style="color:${pagado ? 'var(--green)' : 'var(--muted)'};${pagado ? 'text-decoration:line-through;' : ''}">${n}</span>
+              </div>
+              <span style="color:${pagado ? 'var(--green)' : 'var(--red)'};font-weight:600;">${fmt(c)}</span>
+            </div>`;
+          }).join('')}
+          <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:0.75rem;">
+            <span style="color:var(--muted)">Pagados: ${Object.keys(mb['_programas']).filter(n => transactions.some(t => t.type==='expense' && t.cat==='Programas' && t.programa===n && t.date && t.date.startsWith(month))).length} / ${Object.keys(mb['_programas']).length}</span>
+            <span style="color:var(--muted)">Falta: ${fmt(Object.entries(mb['_programas']).filter(([n]) => !transactions.some(t => t.type==='expense' && t.cat==='Programas' && t.programa===n && t.date && t.date.startsWith(month))).reduce((s,[,c])=>s+c,0))}</span>
+          </div>
+         </div>` : '';
     return `
-      <div class="budget-item">
+      <div class="budget-item" style="border-color:${groupColor}22;">
         <div class="budget-header">
-          <div class="budget-cat">${cat}</div>
+          <div class="budget-cat" style="color:${groupColor}">${cat}</div>
           <div class="budget-amounts">
             <div style="color:var(--text);font-weight:600">${fmt(spent)}</div>
-            <div>de ${fmt(limit)}</div>
+            <div>${limit > 0 ? 'de '+fmt(limit) : '<span style="color:var(--muted);font-style:italic">sin presupuesto</span>'}</div>
           </div>
         </div>
-        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${color}"></div></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${pctCapped}%;background:${barColor}"></div></div>
         <div style="font-size:0.75rem;color:var(--muted);margin-top:8px;display:flex;justify-content:space-between">
-          <span>${pct.toFixed(0)}% usado</span>
-          <span style="color:${pct>100?'var(--red)':''}">
-            ${pct>100 ? 'Excedido por '+fmt(spent-limit) : 'Disponible: '+fmt(limit-spent)}
-          </span>
+          <span>${limit > 0 ? pct.toFixed(0)+'% usado' : 'Gastado: '+fmt(spent)}</span>
+          <span>${limit > 0 ? statusText : '—'}</span>
         </div>
+        ${progDesglose}
+      </div>`;
+  };
+
+  // Calcular resumen incluyendo variables
+  const allCats = Object.values(GRUPOS).flatMap(g => g.cats);
+  const totalFijos = allCats.reduce((s,c) => s+(mb[c]||0), 0);
+  const pctDiezmo = parseFloat(localStorage.getItem('cs_pct') ? JSON.parse(localStorage.getItem('cs_pct')).diezmo||5 : 5)/100;
+  const pctBoveda = parseFloat(localStorage.getItem('cs_pct') ? JSON.parse(localStorage.getItem('cs_pct')).boveda||19 : 19)/100;
+  const totalIngresos = transactions.filter(t => t.type==='income' && t.date && t.date.startsWith(month)).reduce((s,t)=>s+t.amount,0);
+  const valDiezmo = totalIngresos * pctDiezmo;
+  const valBoveda = totalIngresos * pctBoveda;
+  const totalPresupuesto = totalFijos + valDiezmo + valBoveda;
+
+  const totalGastadoFijos = allCats.reduce((s,c) => {
+    return s + transactions.filter(t => t.type==='expense' && t.cat===c && t.date && t.date.startsWith(month)).reduce((a,t)=>a+t.amount,0);
+  }, 0);
+  const totalGastadoDiezmo = transactions.filter(t => t.type==='expense' && t.cat==='Diezmo' && t.date && t.date.startsWith(month)).reduce((s,t)=>s+t.amount,0);
+  const totalGastadoBoveda = transactions.filter(t => t.type==='expense' && t.cat==='Ahorro Bóveda' && t.date && t.date.startsWith(month)).reduce((s,t)=>s+t.amount,0);
+  const totalGastado = totalGastadoFijos + totalGastadoDiezmo + totalGastadoBoveda;
+
+  document.getElementById('summaryTotal').textContent = fmt(totalPresupuesto);
+  document.getElementById('summarySpent').textContent = fmt(totalGastado);
+  document.getElementById('summaryNeeded').textContent = fmt(Math.max(totalPresupuesto - totalGastado, 0));
+
+  let html = '';
+  for (const [grupo, cfg] of Object.entries(GRUPOS)) {
+    const totalLimit = cfg.cats.reduce((s,c) => s+(mb[c]||0), 0);
+    const totalSpent = cfg.cats.reduce((s,c) => {
+      return s + transactions.filter(t => t.type==='expense' && t.cat===c && t.date && t.date.startsWith(month)).reduce((a,t)=>a+t.amount,0);
+    }, 0);
+    html += `
+      <div style="grid-column:1/-1; margin-bottom:4px; margin-top:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:${cfg.bg};border:1px solid ${cfg.border};border-radius:10px;">
+          <span style="font-family:'Space Grotesk';font-weight:600;font-size:0.9rem;color:${cfg.color}">${cfg.label}</span>
+          <span style="font-family:'Space Grotesk';font-size:0.85rem;color:var(--muted);">Total: <span style="color:${cfg.color};font-weight:600">${fmt(totalSpent)}</span>${totalLimit > 0 ? ' / '+fmt(totalLimit) : ''}</span>
+        </div>
+      </div>
+      ${cfg.cats.map(c => buildCard(c, cfg.color)).join('')}
+    `;
+  }
+
+  grid.innerHTML = html;
+  renderVariables();
+}
+
+// ─── TASA DE CAMBIO ──────────────────────────────────────────────────────────
+let tasaUSD = parseFloat(localStorage.getItem('cs_tasa_usd')) || 0;
+let tasaFetched = false;
+
+async function fetchTasa() {
+  if (tasaFetched && tasaUSD > 0) return tasaUSD;
+  try {
+    const res = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+    const data = await res.json();
+    tasaUSD = data.rates.COP;
+    localStorage.setItem('cs_tasa_usd', tasaUSD);
+    localStorage.setItem('cs_tasa_fecha', new Date().toLocaleDateString('es-CO'));
+    tasaFetched = true;
+    return tasaUSD;
+  } catch(e) {
+    // Fallback a tasa guardada o manual
+    return tasaUSD || 4200;
+  }
+}
+
+async function checkConversion() {
+  const currency = document.getElementById('fCurrency')?.value;
+  const box = document.getElementById('conversionBox');
+  if (currency !== 'USD') { if(box) box.style.display = 'none'; return; }
+  
+  const amount = parseAmt('fAmount');
+  if (!amount) { if(box) box.style.display = 'none'; return; }
+  
+  if(box) box.style.display = 'block';
+  document.getElementById('tasaActual').textContent = 'Cargando...';
+  
+  const tasa = await fetchTasa();
+  const enPesos = amount * tasa;
+  
+  document.getElementById('conversionResult').textContent = fmt(enPesos) + ' COP';
+  document.getElementById('tasaActual').textContent = '1 USD = ' + fmt(tasa) + ' COP';
+}
+
+function convertirACOP(amount, currency) {
+  if (currency === 'COP' || !currency) return amount;
+  return amount * (tasaUSD || 4200);
+}
+
+// ─── CLIENTES ─────────────────────────────────────────────────────────────────
+let clientes = JSON.parse(localStorage.getItem('cs_clientes') || '[]');
+let currentClienteId = null;
+
+function saveClientes() {
+  localStorage.setItem('cs_clientes', JSON.stringify(clientes));
+}
+
+function fmtInput(input) {
+  const raw = input.value.replace(/\./g, '').replace(/[^0-9]/g, '');
+  if (!raw) { input.value = ''; return; }
+  const num = parseInt(raw, 10);
+  const pos = input.selectionStart;
+  const prevLen = input.value.length;
+  input.value = new Intl.NumberFormat('es-CO').format(num);
+  const diff = input.value.length - prevLen;
+  try { input.setSelectionRange(pos + diff, pos + diff); } catch(e) {}
+}
+
+function parseAmt(inputId) {
+  const val = document.getElementById(inputId)?.value || '';
+  return parseFloat(val.replace(/\./g, '').replace(/,/g, '')) || 0;
+}
+
+function previewAmt(inputId, previewId) {
+  const val = parseAmt(inputId);
+  const el = document.getElementById(previewId);
+  if (el) el.textContent = val > 0 ? '→ ' + fmt(val) : '';
+}
+
+function calcTotal() {
+  const canciones = parseFloat(document.getElementById('cCanciones').value) || 0;
+  const valor = parseAmt('cValorCancion');
+  if (canciones && valor) {
+    const total = canciones * valor;
+    document.getElementById('cTotal').value = new Intl.NumberFormat('es-CO').format(total);
+  }
+}
+
+function showClienteForm(id = null) {
+  document.getElementById('cId').value = id || '';
+  document.getElementById('clienteFormTitle').textContent = id ? 'Editar artista' : 'Nuevo artista';
+  if (id) {
+    const c = clientes.find(x => x.id === id);
+    if (c) {
+      document.getElementById('cNombre').value = c.nombre || '';
+      document.getElementById('cCorreo').value = c.correo || '';
+      document.getElementById('cPais').value = c.pais || '';
+      document.getElementById('cCumple').value = c.cumple || '';
+      document.getElementById('cCumple2').value = c.cumple2 || '';
+      document.getElementById('cPaisCodigo').value = c.paisCodigo || '+57';
+      document.getElementById('cWhatsapp').value = c.whatsapp || '';
+      document.getElementById('cServicio').value = c.servicio || '';
+      document.getElementById('cMoneda').value = c.moneda || 'COP';
+      document.getElementById('cCanciones').value = c.canciones || '';
+      document.getElementById('cValorCancion').value = c.valorCancion || '';
+      document.getElementById('cTotal').value = c.total || '';
+      document.getElementById('cInicial').value = c.inicial || '';
+      document.getElementById('cInicialMedio').value = c.inicialMedio || '';
+      document.getElementById('cCuota').value = c.cuota || '';
+      document.getElementById('cDiaPago').value = c.diaPago || '';
+      document.getElementById('cFechaInicio').value = c.fechaInicio || '';
+      document.getElementById('cEstado').value = c.estado || 'activo';
+      document.getElementById('cNotas').value = c.notas || '';
+    }
+  } else {
+    ['cNombre','cCorreo','cPais','cWhatsapp','cCanciones','cValorCancion','cTotal','cInicial','cInicialMedio','cCuota','cDiaPago','cNotas'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('cCumple').value = '';
+    document.getElementById('cCumple2').value = '';
+    document.getElementById('cPaisCodigo').value = '+57';
+    document.getElementById('cMoneda').value = 'COP';
+    document.getElementById('cFechaInicio').value = new Date().toISOString().slice(0,10);
+    document.getElementById('cEstado').value = 'activo';
+  }
+  document.getElementById('clienteFormModal').style.display = 'block';
+}
+
+function closeClienteForm() {
+  document.getElementById('clienteFormModal').style.display = 'none';
+}
+
+function saveCliente() {
+  const id = document.getElementById('cId').value || Date.now().toString();
+  const nombre = document.getElementById('cNombre').value.trim();
+  if (!nombre) { showToast('El nombre es requerido.', 'error'); return; }
+
+  const cliente = {
+    id,
+    nombre,
+    correo: document.getElementById('cCorreo').value.trim(),
+    pais: document.getElementById('cPais').value.trim(),
+    cumple: document.getElementById('cCumple').value,
+    cumple2: document.getElementById('cCumple2').value,
+    paisCodigo: document.getElementById('cPaisCodigo').value,
+    whatsapp: document.getElementById('cPaisCodigo').value + ' ' + document.getElementById('cWhatsapp').value.trim(),
+    servicio: document.getElementById('cServicio').value,
+    moneda: document.getElementById('cMoneda').value,
+    canciones: parseFloat(document.getElementById('cCanciones').value) || 0,
+    valorCancion: parseFloat(document.getElementById('cValorCancion').value) || 0,
+    total: parseAmt('cTotal'),
+    inicial: parseAmt('cInicial'),
+    inicialMedio: document.getElementById('cInicialMedio').value.trim(),
+    cuota: parseAmt('cCuota'),
+    diaPago: parseInt(document.getElementById('cDiaPago').value) || 0,
+    fechaInicio: document.getElementById('cFechaInicio').value,
+    estado: document.getElementById('cEstado').value,
+    notas: document.getElementById('cNotas').value.trim(),
+    pagos: clientes.find(x => x.id === id)?.pagos || []
+  };
+
+  // Si tiene cuota inicial y es cliente nuevo, agregarla como primer pago
+  const existing = clientes.find(x => x.id === id);
+  if (!existing && cliente.inicial > 0) {
+    const pagoInicial = {
+      id: (Date.now() + 1).toString(),
+      monto: cliente.inicial,
+      fecha: cliente.fechaInicio || new Date().toISOString().slice(0,10),
+      medio: cliente.inicialMedio || 'Cuota inicial',
+      registradoPor: getWho()
+    };
+    cliente.pagos = [pagoInicial];
+    registrarIngresoCliente(cliente, cliente.inicial, pagoInicial.fecha, cliente.inicialMedio || 'Cuota inicial', 'Cuota inicial');
+  }
+
+  const idx = clientes.findIndex(x => x.id === id);
+  if (idx >= 0) clientes[idx] = cliente;
+  else clientes.unshift(cliente);
+
+  saveClientes();
+  closeClienteForm();
+  renderClientes();
+  showToast(`✓ Artista ${nombre} guardado`);
+}
+
+function registrarIngresoCliente(cliente, monto, fecha, medio, tipoPago = 'Abono') {
+  const tx = {
+    id: Date.now(),
+    type: 'income',
+    desc: cliente.nombre,
+    amount: monto,
+    currency: cliente.moneda || 'COP',
+    cat: cliente.servicio,
+    payment: medio,
+    tipoPago: tipoPago,
+    programa: '',
+    date: fecha || new Date().toISOString().slice(0,10),
+    note: `Pago contrato - ${cliente.servicio}`,
+    who: getWho()
+  };
+  transactions.unshift(tx);
+  saveTransaction(tx).catch(() => {});
+}
+
+function getTotalPagado(cliente) {
+  return (cliente.pagos || []).reduce((s, p) => s + p.monto, 0);
+}
+
+function getSaldoPendiente(cliente) {
+  return Math.max(cliente.total - getTotalPagado(cliente), 0);
+}
+
+function getCuotaVencida(cliente) {
+  // Retorna solo la cuota mensual pactada si está en mora, no el total del contrato
+  if (!isMora(cliente)) return 0;
+  return cliente.cuota || 0;
+}
+
+function isMora(cliente) {
+  if (cliente.estado !== 'activo') return false;
+  if (!cliente.diaPago) return false;
+  const hoy = new Date();
+  const diaPago = cliente.diaPago;
+  const pagoEsteMes = (cliente.pagos || []).some(p => {
+    const fp = new Date(p.fecha);
+    return fp.getMonth() === hoy.getMonth() && fp.getFullYear() === hoy.getFullYear();
+  });
+  return hoy.getDate() > diaPago && !pagoEsteMes && getSaldoPendiente(cliente) > 0;
+}
+
+function getEstadoBadge(cliente) {
+  if (cliente.estado === 'terminado') return `<span class="badge" style="background:rgba(136,136,160,0.15);color:var(--muted);">Terminado</span>`;
+  if (cliente.estado === 'pausado') return `<span class="badge" style="background:rgba(251,191,36,0.15);color:var(--yellow);">Pausado</span>`;
+  if (getSaldoPendiente(cliente) === 0) return `<span class="badge income">✓ Saldado</span>`;
+  if (isMora(cliente)) return `<span class="badge expense">⚠ En mora</span>`;
+  return `<span class="badge" style="background:rgba(8,145,178,0.15);color:var(--accent2);">Activo</span>`;
+}
+
+function limpiarFiltros() {
+  document.getElementById('clienteSearch').value = '';
+  document.getElementById('filterEstadoPago').value = '';
+  document.getElementById('filterEstadoCliente').value = '';
+  document.getElementById('filterPais').value = '';
+  renderClientes();
+}
+
+function getEstadoLabel(estado) {
+  const map = { activo:'Activo', pausado:'Pausado', terminado:'Terminado', listo:'Listo para publicar' };
+  return map[estado] || estado;
+}
+
+function renderClientes() {
+  const search = document.getElementById('clienteSearch')?.value.toLowerCase() || '';
+  const filterPago = document.getElementById('filterEstadoPago')?.value || '';
+  const filterEstado = document.getElementById('filterEstadoCliente')?.value || '';
+  const filterPais = document.getElementById('filterPais')?.value || '';
+
+  // Populate pais filter
+  const paises = [...new Set(clientes.map(c => c.pais).filter(Boolean))].sort();
+  const paisSel = document.getElementById('filterPais');
+  if (paisSel) {
+    const cur = paisSel.value;
+    paisSel.innerHTML = '<option value="">🌎 Todos los países</option>' +
+      paises.map(p => `<option value="${p}" ${p===cur?'selected':''}>${p}</option>`).join('');
+  }
+
+  let filtered = clientes.filter(c => {
+    const matchSearch = !search ||
+      (c.nombre||'').toLowerCase().includes(search) ||
+      (c.correo||'').toLowerCase().includes(search) ||
+      (c.whatsapp||'').toLowerCase().includes(search) ||
+      (c.nombreArt||'').toLowerCase().includes(search) ||
+      (c.identificacion||'').toLowerCase().includes(search);
+    const matchPago = !filterPago ||
+      (filterPago === 'mora' && isMora(c)) ||
+      (filterPago === 'aldia' && !isMora(c) && getSaldoPendiente(c) > 0 && c.estado === 'activo');
+    const matchEstado = !filterEstado || c.estado === filterEstado;
+    const matchPais = !filterPais || c.pais === filterPais;
+    return matchSearch && matchPago && matchEstado && matchPais;
+  });
+
+  // Stats
+  document.getElementById('statActivos').textContent = clientes.filter(c => c.estado === 'activo').length;
+  document.getElementById('statMora').textContent = clientes.filter(c => isMora(c)).length;
+  // Cartera = solo cuotas vencidas de clientes en mora
+  const carteraCOP = clientes.filter(c => (c.moneda||'COP')==='COP').reduce((s,c) => s + getCuotaVencida(c), 0);
+  const carteraUSD = clientes.filter(c => c.moneda==='USD').reduce((s,c) => s + getCuotaVencida(c), 0);
+  document.getElementById('statCartera').textContent = fmt(carteraCOP);
+  document.getElementById('statCarteraUSD').textContent = fmt(carteraUSD, 'USD');
+
+  const list = document.getElementById('clientesList');
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty-state"><div class="emoji">👥</div><div>Sin artistas. ¡Agrega el primero!</div></div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(c => {
+    const pagado = getTotalPagado(c);
+    const pendiente = getSaldoPendiente(c);
+    const pct = c.total > 0 ? Math.min((pagado/c.total)*100, 100) : 0;
+    const mora = isMora(c);
+    return `
+      <div class="card" style="margin-bottom:12px;cursor:pointer;transition:border-color 0.15s;${mora?'border-color:rgba(248,113,113,0.4);':''}" onclick="openFicha('${c.id}')">
+        <div style="display:flex;align-items:center;gap:16px;">
+          <div style="width:42px;height:42px;border-radius:50%;background:${mora?'rgba(248,113,113,0.15)':'rgba(8,145,178,0.15)'};display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk';font-weight:700;font-size:1rem;color:${mora?'var(--red)':'var(--accent2)'};flex-shrink:0;">
+            ${c.nombre.charAt(0).toUpperCase()}
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:3px;">
+              <span style="font-weight:600;font-size:0.95rem;">${c.nombre}</span>
+              ${getEstadoBadge(c)}
+            </div>
+            <div style="font-size:0.78rem;color:var(--muted);">${c.servicio} ${c.pais ? '· '+c.pais : ''}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-family:'Space Grotesk';font-weight:700;font-size:0.95rem;color:${pendiente>0?'var(--red)':'var(--green)'};">${fmt(pendiente, c.moneda)}</div>
+            <div style="font-size:0.72rem;color:var(--muted);">pendiente · ${c.moneda||'COP'}</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;">
+          <div class="progress-bar" style="height:5px;">
+            <div class="progress-fill" style="width:${pct}%;background:${mora?'var(--red)':pct>=100?'var(--green)':'var(--accent2)'}"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--muted);margin-top:4px;">
+            <span>Pagado: ${fmt(pagado, c.moneda)}</span>
+            <span>Total: ${fmt(c.total, c.moneda)}</span>
+          </div>
+        </div>
+        ${mora ? `<div style="font-size:0.75rem;color:var(--red);margin-top:8px;">⚠ Cuota del día ${c.diaPago} pendiente este mes</div>` : ''}
       </div>
     `;
   }).join('');
 }
 
+function openFicha(id) {
+  currentClienteId = id;
+  const c = clientes.find(x => x.id === id);
+  if (!c) return;
+
+  const pagado = getTotalPagado(c);
+  const pendiente = getSaldoPendiente(c);
+  const pct = c.total > 0 ? Math.min((pagado/c.total)*100, 100) : 0;
+
+  document.getElementById('fichaName').textContent = c.nombre;
+  document.getElementById('fichaService').textContent = c.servicio + (c.pais ? ' · ' + c.pais : '');
+  document.getElementById('fichaPct').textContent = pct.toFixed(0) + '%';
+  document.getElementById('fichaBar').style.width = pct + '%';
+  document.getElementById('fichaBar').style.background = pct >= 100 ? 'var(--green)' : isMora(c) ? 'var(--red)' : 'var(--accent2)';
+  document.getElementById('pagoFecha').value = new Date().toISOString().slice(0,10);
+
+  document.getElementById('fichaStats').innerHTML = `
+    <div class="kpi" style="padding:16px;">
+      <div class="kpi-label">Total contrato</div>
+      <div class="kpi-value purple" style="font-size:1.2rem;">${fmt(c.total, c.moneda)}</div>
+      <div class="kpi-sub">${c.moneda || 'COP'}</div>
+    </div>
+    <div class="kpi" style="padding:16px;">
+      <div class="kpi-label">Total pagado</div>
+      <div class="kpi-value green" style="font-size:1.2rem;">${fmt(pagado, c.moneda)}</div>
+    </div>
+    <div class="kpi" style="padding:16px;">
+      <div class="kpi-label">Saldo pendiente</div>
+      <div class="kpi-value ${pendiente>0?'red':'green'}" style="font-size:1.2rem;">${fmt(pendiente, c.moneda)}</div>
+    </div>
+  `;
+
+  document.getElementById('fichaInfo').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.82rem;">
+      ${c.correo ? `<div><span style="color:var(--muted)">Correo:</span> ${c.correo}</div>` : ''}
+      ${c.whatsapp ? `<div><span style="color:var(--muted)">WhatsApp:</span> ${c.whatsapp}</div>` : ''}
+      ${c.cumple ? `<div><span style="color:var(--muted)">Cumpleaños:</span> ${c.cumple}</div>` : ''}
+      ${c.cumple2 ? `<div><span style="color:var(--muted)">Cumpleaños (2):</span> ${c.cumple2}</div>` : ''}
+      ${c.diaPago ? `<div><span style="color:var(--muted)">Día de pago:</span> ${c.diaPago} de cada mes</div>` : ''}
+      ${c.cuota ? `<div><span style="color:var(--muted)">Cuota estipulada:</span> ${fmt(c.cuota)}</div>` : ''}
+      ${c.fechaInicio ? `<div><span style="color:var(--muted)">Inicio:</span> ${c.fechaInicio}</div>` : ''}
+      ${c.notas ? `<div style="grid-column:1/-1;"><span style="color:var(--muted)">Notas:</span> ${c.notas}</div>` : ''}
+    </div>
+  `;
+
+  const pagos = (c.pagos || []).slice().reverse();
+  document.getElementById('fichaPagos').innerHTML = pagos.length
+    ? pagos.map((p, i) => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
+        <div>
+          <div style="font-size:0.85rem;font-weight:500;">${p.fecha}</div>
+          <div style="font-size:0.75rem;color:var(--muted);">${p.medio||'—'} · ${p.registradoPor||'—'}${p.numRecibo ? ' · '+p.numRecibo : ''}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-family:'Space Grotesk';font-weight:700;color:var(--green);">+${fmt(p.monto, c.moneda)}</span>
+          <button class="refresh-btn" style="padding:4px 8px;font-size:0.75rem;" title="Ver recibo" onclick="verReciboHistorial('${id}','${p.id}')">🧾</button>
+          <button class="delete-btn" onclick="deletePago('${id}','${p.id}')">✕</button>
+        </div>
+      </div>
+    `).join('')
+    : '<div style="color:var(--muted);font-size:0.85rem;padding:12px 0;">Sin pagos registrados aún.</div>';
+
+  document.getElementById('clienteFichaModal').style.display = 'block';
+}
+
+function closeFicha() {
+  document.getElementById('clienteFichaModal').style.display = 'none';
+  currentClienteId = null;
+}
+
+function editCliente(id) {
+  closeFicha();
+  showClienteForm(id);
+}
+
+function registrarPago() {
+  const monto = parseAmt('pagoMonto');
+  const fecha = document.getElementById('pagoFecha').value;
+  const medio = document.getElementById('pagoMedio').value.trim();
+
+  if (!monto || !fecha) { showToast('Completa monto y fecha.', 'error'); return; }
+
+  const c = clientes.find(x => x.id === currentClienteId);
+  if (!c) return;
+
+  const esInicial = (c.pagos || []).length === 0;
+  const numRecibo = 'CS-' + Date.now().toString().slice(-6);
+  const pago = { id: Date.now().toString(), monto, fecha, medio, registradoPor: getWho(), numRecibo };
+  c.pagos = c.pagos || [];
+  c.pagos.push(pago);
+  saveClientes();
+
+  registrarIngresoCliente(c, monto, fecha, medio);
+
+  document.getElementById('pagoMonto').value = '';
+  document.getElementById('pagoMedio').value = '';
+
+  showToast(`✓ Pago de ${fmt(monto)} registrado`);
+  openFicha(currentClienteId);
+  renderClientes();
+
+  // Mostrar opción de descargar recibo
+  setTimeout(() => generarRecibo(c, pago, esInicial), 300);
+}
+
+function generarRecibo(c, pago, esInicial) {
+  const totalPagado = getTotalPagado(c);
+  const saldo = getSaldoPendiente(c);
+  const tipoPago = esInicial ? 'Cuota inicial' : 'Abono';
+
+  const recibo = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background:#fff; color:#111; padding:40px; max-width:480px; margin:0 auto; }
+  .header { text-align:center; margin-bottom:28px; padding-bottom:20px; border-bottom:2px solid #0891b2; }
+  .logo { font-size:1.5rem; font-weight:800; color:#0891b2; letter-spacing:-0.02em; }
+  .subtitle { font-size:0.8rem; color:#666; margin-top:4px; }
+  .recibo-num { font-size:0.75rem; color:#0891b2; font-weight:600; margin-top:8px; }
+  .section { margin-bottom:20px; }
+  .section-title { font-size:0.7rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:#0891b2; margin-bottom:10px; }
+  .row { display:flex; justify-content:space-between; align-items:flex-start; padding:7px 0; border-bottom:1px solid #f0f0f0; font-size:0.88rem; }
+  .row:last-child { border-bottom:none; }
+  .row .label { color:#666; }
+  .row .value { font-weight:600; text-align:right; max-width:55%; }
+  .monto-box { background:#f0fdf8; border:2px solid #0891b2; border-radius:10px; padding:16px 20px; text-align:center; margin:20px 0; }
+  .monto-label { font-size:0.75rem; color:#0891b2; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; }
+  .monto-value { font-size:2rem; font-weight:800; color:#0891b2; margin-top:4px; }
+  .badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:0.72rem; font-weight:700; text-transform:uppercase; }
+  .badge-inicial { background:#dcfce7; color:#166534; }
+  .badge-abono { background:#dbeafe; color:#1e40af; }
+  .saldo { background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; margin-top:16px; }
+  .saldo .label { font-size:0.8rem; color:#9a3412; }
+  .saldo .value { font-size:1.1rem; font-weight:800; color:#9a3412; }
+  .footer { text-align:center; margin-top:28px; padding-top:16px; border-top:1px solid #eee; font-size:0.72rem; color:#999; line-height:1.6; }
+  .firma { margin-top:32px; display:flex; justify-content:space-between; }
+  .firma-line { width:45%; border-top:1px solid #ccc; padding-top:6px; text-align:center; font-size:0.72rem; color:#999; }
+  @media print { body { padding:20px; } }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">Creando Sueños Studio</div>
+    <div class="subtitle">Sello discográfico</div>
+    <div class="recibo-num">RECIBO N° ${pago.numRecibo || 'CS-' + pago.id.slice(-6)}</div>
+  </div>
+
+  <div class="monto-box">
+    <div class="monto-label">Valor recibido</div>
+    <div class="monto-value">${fmt(pago.monto, c.moneda)}</div>
+    <div style="margin-top:8px;"><span class="badge ${esInicial ? 'badge-inicial' : 'badge-abono'}">${tipoPago}</span></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Datos del artista</div>
+    <div class="row"><span class="label">Nombre</span><span class="value">${c.nombre}</span></div>
+    <div class="row"><span class="label">Servicio</span><span class="value">${c.servicio}</span></div>
+    ${c.pais ? `<div class="row"><span class="label">País</span><span class="value">${c.pais}</span></div>` : ''}
+  </div>
+
+  <div class="section">
+    <div class="section-title">Detalle del pago</div>
+    <div class="row"><span class="label">Fecha de pago</span><span class="value">${pago.fecha}</span></div>
+    <div class="row"><span class="label">Medio de pago</span><span class="value">${pago.medio || '—'}</span></div>
+
+  </div>
+
+  <div class="section">
+    <div class="section-title">Estado del contrato</div>
+    <div class="row"><span class="label">Total del contrato</span><span class="value">${fmt(c.total, c.moneda)}</span></div>
+    <div class="row"><span class="label">Total pagado</span><span class="value" style="color:#16a34a;">${fmt(totalPagado, c.moneda)}</span></div>
+  </div>
+
+  ${saldo > 0 ? `
+  <div class="saldo">
+    <span class="label">Saldo pendiente</span>
+    <span class="value">${fmt(saldo, c.moneda)}</span>
+  </div>
+  ` : `
+  <div class="saldo" style="background:#dcfce7;border-color:#86efac;">
+    <span class="label" style="color:#166534;">✓ Contrato saldado</span>
+    <span class="value" style="color:#166534;">$0</span>
+  </div>
+  `}
+
+  <div class="footer">
+    Creando Sueños Studio · creandosuenosstudio@gmail.com<br>
+    Este recibo es constancia de pago válida emitida por Creando Sueños Studio.<br>
+    Fecha de emisión: ${new Date().toLocaleDateString('es-CO')}
+  </div>
+</body>
+</html>`;
+
+  // Mostrar modal con el recibo
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:14px;padding:24px;max-width:540px;width:100%;max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <span style="font-family:'Space Grotesk';font-weight:700;font-size:1rem;">Recibo generado</span>
+        <button onclick="this.closest('div[style*=fixed]').remove()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;">✕</button>
+      </div>
+      <iframe id="reciboFrame" style="width:100%;height:420px;border:none;border-radius:8px;background:#fff;"></iframe>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button onclick="descargarReciboImagen()" class="btn-primary" style="flex:1;">📷 Descargar imagen</button>
+        <button onclick="printRecibo()" class="refresh-btn" style="flex:1;text-align:center;">🖨 Imprimir / PDF</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  window._reciboHTML = recibo;
+  const iframe = document.getElementById('reciboFrame');
+  iframe.srcdoc = recibo;
+}
+
+async function descargarReciboImagen() {
+  const iframe = document.getElementById('reciboFrame');
+  if (!iframe) return;
+
+  const btn = event.target;
+  btn.textContent = '⏳ Generando...';
+  btn.disabled = true;
+
+  try {
+    // Cargar html2canvas si no está cargado
+    if (!window.html2canvas) {
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    }
+
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+    const canvas = await html2canvas(iframeDoc.body, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      width: 480,
+      windowWidth: 480
+    });
+
+    const link = document.createElement('a');
+    link.download = `recibo-CS-${Date.now()}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    showToast('✓ Imagen descargada');
+  } catch(e) {
+    // Fallback: abrir en nueva ventana para guardar manualmente
+    const win = window.open('', '_blank');
+    win.document.write(window._reciboHTML || '');
+    showToast('Abre la ventana y guarda como imagen con clic derecho.', 'error');
+  } finally {
+    btn.textContent = '📷 Descargar imagen';
+    btn.disabled = false;
+  }
+}
+
+function downloadRecibo() {
+  if (!window._reciboHTML) return;
+  const blob = new Blob([window._reciboHTML], { type: 'text/html' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `recibo-CS-${Date.now()}.html`;
+  a.click();
+}
+
+function printRecibo() {
+  const iframe = document.getElementById('reciboFrame');
+  if (iframe) iframe.contentWindow.print();
+}
+
+function generarReciboMovimiento(txId) {
+  const t = transactions.find(x => String(x.id) === String(txId));
+  if (!t) return;
+
+  // Si es pago de artista, buscar el artista y generar recibo completo
+  const cliente = clientes.find(c => c.nombre === t.desc);
+  if (cliente && t.type === 'income') {
+    const pago = (cliente.pagos || []).find(p => p.monto === t.amount && p.fecha === t.date);
+    if (pago) {
+      const esInicial = cliente.pagos[0]?.id === pago.id;
+      generarRecibo(cliente, pago, esInicial);
+      return;
+    }
+  }
+
+  // Comprobante genérico para otros movimientos
+  const numRef = 'CS-' + String(t.id).slice(-6);
+  const recibo = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#111; padding:40px; max-width:480px; margin:0 auto; }
+  .header { text-align:center; margin-bottom:28px; padding-bottom:20px; border-bottom:2px solid #0891b2; }
+  .logo { font-size:1.5rem; font-weight:800; color:#0891b2; }
+  .subtitle { font-size:0.8rem; color:#666; margin-top:4px; }
+  .ref { font-size:0.75rem; color:#0891b2; font-weight:600; margin-top:8px; }
+  .monto-box { background:${t.type==='income'?'#f0fdf8':'#fff7ed'}; border:2px solid ${t.type==='income'?'#0891b2':'#f97316'}; border-radius:10px; padding:16px 20px; text-align:center; margin:20px 0; }
+  .monto-label { font-size:0.75rem; color:${t.type==='income'?'#0891b2':'#ea580c'}; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; }
+  .monto-value { font-size:2rem; font-weight:800; color:${t.type==='income'?'#0891b2':'#ea580c'}; margin-top:4px; }
+  .row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #f0f0f0; font-size:0.88rem; }
+  .row:last-child { border-bottom:none; }
+  .label { color:#666; }
+  .value { font-weight:600; text-align:right; }
+  .section-title { font-size:0.7rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:#0891b2; margin:16px 0 8px; }
+  .footer { text-align:center; margin-top:28px; padding-top:16px; border-top:1px solid #eee; font-size:0.72rem; color:#999; line-height:1.6; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">Creando Sueños Studio</div>
+    <div class="subtitle">Sello discográfico</div>
+    <div class="ref">COMPROBANTE N° ${numRef}</div>
+  </div>
+
+  <div class="monto-box">
+    <div class="monto-label">${t.type === 'income' ? 'Ingreso registrado' : 'Gasto registrado'}</div>
+    <div class="monto-value">${t.type==='income'?'+':'-'}${fmt(t.amount, t.currency)}</div>
+  </div>
+
+  <div class="section-title">Detalle</div>
+  <div class="row"><span class="label">Descripción</span><span class="value">${t.desc}</span></div>
+  <div class="row"><span class="label">Categoría</span><span class="value">${t.cat}</span></div>
+  <div class="row"><span class="label">Fecha</span><span class="value">${t.date}</span></div>
+  ${t.payment ? `<div class="row"><span class="label">Medio de pago</span><span class="value">${t.payment}</span></div>` : ''}
+  ${t.tipoPago ? `<div class="row"><span class="label">Tipo de pago</span><span class="value">${t.tipoPago}</span></div>` : ''}
+
+  ${t.note ? `<div class="row"><span class="label">Nota</span><span class="value">${t.note}</span></div>` : ''}
+
+  <div class="footer">
+    Creando Sueños Studio · creandosuenosstudio@gmail.com<br>
+    Fecha de emisión: ${new Date().toLocaleDateString('es-CO')}
+  </div>
+</body>
+</html>`;
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:14px;padding:24px;max-width:540px;width:100%;max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <span style="font-family:'Space Grotesk';font-weight:700;font-size:1rem;">Comprobante de transacción</span>
+        <button onclick="this.closest('div[style*=fixed]').remove()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;">✕</button>
+      </div>
+      <iframe id="reciboFrame" style="width:100%;height:420px;border:none;border-radius:8px;background:#fff;"></iframe>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button onclick="descargarReciboImagen()" class="btn-primary" style="flex:1;">📷 Descargar imagen</button>
+        <button onclick="document.getElementById('reciboFrame').contentWindow.print()" class="refresh-btn" style="flex:1;text-align:center;">🖨 Imprimir / PDF</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  window._reciboHTML = recibo;
+  setTimeout(() => { document.getElementById('reciboFrame').srcdoc = recibo; }, 100);
+}
+
+function verReciboHistorial(clienteId, pagoId) {
+  const c = clientes.find(x => x.id === clienteId);
+  if (!c) return;
+  const pago = (c.pagos || []).find(p => p.id === pagoId);
+  if (!pago) return;
+  const esInicial = c.pagos[0]?.id === pagoId;
+  generarRecibo(c, pago, esInicial);
+}
+
+function deleteCliente(id) {
+  const c = clientes.find(x => x.id === id);
+  if (!c) return;
+  if (!confirm(`¿Eliminar a ${c.nombre}? Esta acción no se puede deshacer.`)) return;
+  clientes = clientes.filter(x => x.id !== id);
+  saveClientes();
+  closeFicha();
+  renderClientes();
+  showToast(`Artista ${c.nombre} eliminado.`);
+}
+
+function deletePago(clienteId, pagoId) {
+  if (!confirm('¿Eliminar este pago?')) return;
+  const c = clientes.find(x => x.id === clienteId);
+  if (!c) return;
+  c.pagos = (c.pagos || []).filter(p => p.id !== pagoId);
+  saveClientes();
+  openFicha(clienteId);
+  renderClientes();
+  showToast('Pago eliminado.');
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 document.getElementById('fDate').value = new Date().toISOString().slice(0,10);
-loadData();
-// Auto-refresh every 60 seconds
-setInterval(loadData, 60000);
+// Cargar porcentajes guardados
+const savedPct = JSON.parse(localStorage.getItem('cs_pct') || '{}');
+if (savedPct.diezmo && document.getElementById('pctDiezmo')) document.getElementById('pctDiezmo').value = savedPct.diezmo;
+if (savedPct.boveda && document.getElementById('pctBoveda')) document.getElementById('pctBoveda').value = savedPct.boveda;
+const savedInversion = localStorage.getItem('cs_inversion');
+if (savedInversion && document.getElementById('montoInversion')) document.getElementById('montoInversion').value = savedInversion;
+fetchTasa().then(() => loadData());
+// Auto-refresh desactivado en modo prueba - se activa en versión final
+// setInterval(loadData, 60000);
 </script>
 </body>
 </html>
