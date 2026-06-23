@@ -1828,12 +1828,13 @@ function showClienteForm(id = null) {
     const c = clientes.find(x => x.id === id);
     if (c) {
       document.getElementById('cNombre').value = c.nombre || '';
+      document.getElementById('cNombreArt').value = c.nombreArt || '';
       document.getElementById('cCorreo').value = c.correo || '';
       document.getElementById('cPais').value = c.pais || '';
       document.getElementById('cCumple').value = c.cumple || '';
       document.getElementById('cCumple2').value = c.cumple2 || '';
       document.getElementById('cPaisCodigo').value = c.paisCodigo || '+57';
-      document.getElementById('cWhatsapp').value = c.whatsapp || '';
+      document.getElementById('cWhatsapp').value = c.whatsappNum || '';
       document.getElementById('cServicio').value = c.servicio || '';
       document.getElementById('cMoneda').value = c.moneda || 'COP';
       document.getElementById('cCanciones').value = c.canciones || '';
@@ -1849,7 +1850,7 @@ function showClienteForm(id = null) {
       document.getElementById('cNotas').value = c.notas || '';
     }
   } else {
-    ['cNombre','cCorreo','cPais','cWhatsapp','cCanciones','cValorCancion','cTotal','cInicial','cInicialMedio','cCuota','cDiaPago','cNotas'].forEach(id => document.getElementById(id).value = '');
+    ['cNombre','cNombreArt','cCorreo','cPais','cWhatsapp','cCanciones','cValorCancion','cTotal','cInicial','cInicialMedio','cCuota','cDiaPago','cNotas'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('cMesInicioCobro').value = '';
     document.getElementById('cCumple').value = '';
     document.getElementById('cCumple2').value = '';
@@ -1873,11 +1874,13 @@ function saveCliente() {
   const cliente = {
     id,
     nombre,
+    nombreArt: document.getElementById('cNombreArt').value.trim(),
     correo: document.getElementById('cCorreo').value.trim(),
     pais: document.getElementById('cPais').value.trim(),
     cumple: document.getElementById('cCumple').value,
     cumple2: document.getElementById('cCumple2').value,
     paisCodigo: document.getElementById('cPaisCodigo').value,
+    whatsappNum: document.getElementById('cWhatsapp').value.trim(),
     whatsapp: document.getElementById('cPaisCodigo').value + ' ' + document.getElementById('cWhatsapp').value.trim(),
     servicio: document.getElementById('cServicio').value,
     moneda: document.getElementById('cMoneda').value,
