@@ -779,6 +779,12 @@
               <input type="text" id="cInicialMedio" placeholder="Ej: Nequi, PayPal, Efectivo...">
             </div>
           </div>
+
+          <div class="form-group" style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.2);border-radius:10px;padding:14px;">
+            <label style="color:var(--yellow);">Abonos históricos (antes de la app)</label>
+            <input type="text" id="cAbonoHistorico" placeholder="0" oninput="fmtInput(this)" inputmode="numeric" style="margin-top:8px;">
+            <div style="font-size:0.72rem;color:var(--muted);margin-top:6px;">💡 Si el cliente ya venía abonando antes de registrarlo aquí, pon el total acumulado. Este monto descuenta del saldo pendiente pero <strong>no aparece como ingreso del mes</strong>.</div>
+          </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div class="form-group">
               <label>Valor de la cuota mensual</label>
@@ -1842,6 +1848,7 @@ function showClienteForm(id = null) {
       document.getElementById('cTotal').value = c.total || '';
       document.getElementById('cInicial').value = c.inicial || '';
       document.getElementById('cInicialMedio').value = c.inicialMedio || '';
+      document.getElementById('cAbonoHistorico').value = c.abonoHistorico ? new Intl.NumberFormat('es-CO').format(c.abonoHistorico) : '';
       document.getElementById('cCuota').value = c.cuota || '';
       document.getElementById('cDiaPago').value = c.diaPago || '';
       document.getElementById('cMesInicioCobro').value = c.mesInicioCobro || '';
@@ -1850,7 +1857,7 @@ function showClienteForm(id = null) {
       document.getElementById('cNotas').value = c.notas || '';
     }
   } else {
-    ['cNombre','cNombreArt','cCorreo','cPais','cWhatsapp','cCanciones','cValorCancion','cTotal','cInicial','cInicialMedio','cCuota','cDiaPago','cNotas'].forEach(id => document.getElementById(id).value = '');
+    ['cNombre','cNombreArt','cCorreo','cPais','cWhatsapp','cCanciones','cValorCancion','cTotal','cInicial','cInicialMedio','cAbonoHistorico','cCuota','cDiaPago','cNotas'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('cMesInicioCobro').value = '';
     document.getElementById('cCumple').value = '';
     document.getElementById('cCumple2').value = '';
@@ -1889,6 +1896,7 @@ function saveCliente() {
     total: parseAmt('cTotal'),
     inicial: parseAmt('cInicial'),
     inicialMedio: document.getElementById('cInicialMedio').value.trim(),
+    abonoHistorico: parseAmt('cAbonoHistorico'),
     cuota: parseAmt('cCuota'),
     diaPago: parseInt(document.getElementById('cDiaPago').value) || 0,
     mesInicioCobro: document.getElementById('cMesInicioCobro').value || '',
@@ -1942,7 +1950,9 @@ function registrarIngresoCliente(cliente, monto, fecha, medio, tipoPago = 'Abono
 }
 
 function getTotalPagado(cliente) {
-  return (cliente.pagos || []).reduce((s, p) => s + p.monto, 0);
+  const pagosEnApp = (cliente.pagos || []).reduce((s, p) => s + p.monto, 0);
+  const historico = cliente.abonoHistorico || 0;
+  return pagosEnApp + historico;
 }
 
 function getSaldoPendiente(cliente) {
@@ -2098,11 +2108,11 @@ function openFicha(id) {
     <div class="kpi" style="padding:16px;">
       <div class="kpi-label">Total contrato</div>
       <div class="kpi-value purple" style="font-size:1.2rem;">${fmt(c.total, c.moneda)}</div>
-      <div class="kpi-sub">${c.moneda || 'COP'}</div>
     </div>
     <div class="kpi" style="padding:16px;">
       <div class="kpi-label">Total pagado</div>
       <div class="kpi-value green" style="font-size:1.2rem;">${fmt(pagado, c.moneda)}</div>
+      ${c.abonoHistorico ? `<div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">Incluye ${fmt(c.abonoHistorico, c.moneda)} históricos</div>` : ''}
     </div>
     <div class="kpi" style="padding:16px;">
       <div class="kpi-label">Saldo pendiente</div>
