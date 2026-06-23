@@ -608,7 +608,22 @@
   <div class="section" id="clientes">
     <div class="section-header">
       <h2>Artistas</h2>
-      <button class="btn-primary" style="width:auto;padding:9px 20px;" onclick="showClienteForm()">+ Nuevo artista</button>
+      <div style="display:flex;gap:10px;">
+        <button class="refresh-btn" onclick="toggleServiceManager()">🎵 Gestionar servicios</button>
+        <button class="btn-primary" style="width:auto;padding:9px 20px;" onclick="showClienteForm()">+ Nuevo artista</button>
+      </div>
+    </div>
+
+    <!-- GESTOR DE SERVICIOS -->
+    <div id="serviceManagerPanel" style="display:none;margin-bottom:20px;">
+      <div class="card" style="max-width:480px;">
+        <div class="card-title">🎵 GESTIONAR SERVICIOS</div>
+        <div style="display:flex;gap:10px;margin-bottom:16px;">
+          <input type="text" id="newServiceInput" placeholder="Nombre del nuevo servicio..." style="flex:1;">
+          <button class="btn-primary" style="width:auto;padding:10px 18px;margin:0;" onclick="addIncomeCat()">+ Agregar</button>
+        </div>
+        <div id="incomeCatsList"></div>
+      </div>
     </div>
 
     <!-- BUSCADOR GENERAL -->
@@ -741,17 +756,6 @@
           <div class="form-group">
             <label>Servicio</label>
             <select id="cServicio">
-              <option>Ruta Integral del Artista de Fe</option>
-              <option>Ruta HIT</option>
-              <option>Ruta CTI</option>
-              <option>Aceleradora de Artistas</option>
-              <option>Servicios de Marketing</option>
-              <option>Distribución Musical</option>
-              <option>Clases de Música</option>
-              <option>Song Mission</option>
-              <option>Comunidad Skool</option>
-              <option>Secuencia</option>
-              <option>Extras de Grabación</option>
             </select>
           </div>
           <div class="form-group">
@@ -1001,6 +1005,11 @@ async function loadData() {
       if (config && config.pct) {
         localStorage.setItem('cs_pct', JSON.stringify(config.pct));
       }
+      if (config && config.incomeCats && config.incomeCats.length > 0) {
+        INCOME_CATS = config.incomeCats;
+        localStorage.setItem('cs_income_cats', JSON.stringify(INCOME_CATS));
+        updateAllServiceSelects();
+      }
       if (config && config.expenseCats && config.expenseCats.length > 0) {
         EXPENSE_CATS = config.expenseCats;
         localStorage.setItem('cs_expense_cats', JSON.stringify(EXPENSE_CATS));
@@ -1060,11 +1069,70 @@ function showSection(id) {
 }
 
 // ─── TYPE TOGGLE ─────────────────────────────────────────────────────────────
-const INCOME_CATS = [
+const DEFAULT_INCOME_CATS = [
   'Ruta Integral del Artista de Fe','Ruta HIT','Ruta CTI',
   'Aceleradora de Artistas','Servicios de Marketing','Distribución Musical',
   'Clases de Música','Song Mission','Comunidad Skool','Secuencia','Extras de Grabación'
 ];
+
+let INCOME_CATS = JSON.parse(localStorage.getItem('cs_income_cats') || JSON.stringify(DEFAULT_INCOME_CATS));
+
+function saveIncomeCats() {
+  localStorage.setItem('cs_income_cats', JSON.stringify(INCOME_CATS));
+  saveConfig();
+}
+
+function addIncomeCat() {
+  const input = document.getElementById('newServiceInput');
+  const name = input.value.trim();
+  if (!name) { showToast('Escribe el nombre del servicio.', 'error'); return; }
+  if (INCOME_CATS.includes(name)) { showToast('Ese servicio ya existe.', 'error'); return; }
+  INCOME_CATS.push(name);
+  saveIncomeCats();
+  input.value = '';
+  renderIncomeCatsList();
+  updateAllServiceSelects();
+  showToast(`✓ Servicio "${name}" agregado`);
+}
+
+function deleteIncomeCat(cat) {
+  if (!confirm(`¿Eliminar el servicio "${cat}"?`)) return;
+  INCOME_CATS = INCOME_CATS.filter(c => c !== cat);
+  saveIncomeCats();
+  renderIncomeCatsList();
+  updateAllServiceSelects();
+  showToast(`Servicio "${cat}" eliminado`);
+}
+
+function renderIncomeCatsList() {
+  const list = document.getElementById('incomeCatsList');
+  if (!list) return;
+  list.innerHTML = INCOME_CATS.map(cat => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--surface2);border-radius:7px;margin-bottom:4px;">
+      <span style="font-size:0.85rem;">${cat}</span>
+      <button class="delete-btn" onclick="deleteIncomeCat('${cat}')">✕</button>
+    </div>
+  `).join('');
+}
+
+function updateAllServiceSelects() {
+  // Actualizar selector de categoría en formulario de transacción (ingresos)
+  if (selectedType === 'income') {
+    const fCat = document.getElementById('fCat');
+    if (fCat) {
+      const cur = fCat.value;
+      fCat.innerHTML = '<option value="">— Seleccionar —</option>' + INCOME_CATS.map(c => `<option>${c}</option>`).join('');
+      if (cur) fCat.value = cur;
+    }
+  }
+  // Actualizar selector de servicio en formulario de artista
+  const cServicio = document.getElementById('cServicio');
+  if (cServicio) {
+    const cur = cServicio.value;
+    cServicio.innerHTML = INCOME_CATS.map(c => `<option>${c}</option>`).join('');
+    if (cur) cServicio.value = cur;
+  }
+}
 
 const DEFAULT_EXPENSE_CATS = [
   'Jhonfer','Yamid','Hugo','Alex','Músicos','Practicantes',
@@ -1585,6 +1653,15 @@ function getArtistaDesc() {
   return '';
 }
 
+function toggleServiceManager() {
+  const panel = document.getElementById('serviceManagerPanel');
+  const btn = event.target;
+  const visible = panel.style.display !== 'none';
+  panel.style.display = visible ? 'none' : 'block';
+  btn.textContent = visible ? '🎵 Gestionar servicios' : '✕ Cerrar servicios';
+  if (!visible) renderIncomeCatsList();
+}
+
 function toggleCatManager() {
   const panel = document.getElementById('catManagerPanel');
   const btn = document.getElementById('btnCatManager');
@@ -1910,7 +1987,7 @@ function saveConfig() {
   const grupos = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || window._currentGrupos || {};
   fetch(SCRIPT_URL, {
     method: 'POST',
-    body: JSON.stringify({ action: 'saveConfig', budgets, pct, expenseCats: EXPENSE_CATS, grupos })
+    body: JSON.stringify({ action: 'saveConfig', budgets, pct, expenseCats: EXPENSE_CATS, grupos, incomeCats: INCOME_CATS })
   }).catch(() => {});
 }
 
@@ -2603,6 +2680,7 @@ function deletePago(clienteId, pagoId) {
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 document.getElementById('fDate').value = new Date().toISOString().slice(0,10);
 updateAllCatSelects();
+updateAllServiceSelects();
 // Cargar porcentajes guardados
 const savedPct = JSON.parse(localStorage.getItem('cs_pct') || '{}');
 if (savedPct.diezmo && document.getElementById('pctDiezmo')) document.getElementById('pctDiezmo').value = savedPct.diezmo;
