@@ -464,9 +464,35 @@
   <div class="section" id="presupuesto">
     <div class="section-header">
       <h2>Gastos Fijos de la Empresa</h2>
+      <button class="refresh-btn" onclick="toggleCatManager()" id="btnCatManager">⚙️ Gestionar categorías</button>
       <div style="display:flex;align-items:center;gap:10px;">
         <select id="budgetMonth" onchange="onBudgetMonthChange()" style="width:auto;background:var(--surface);border:1px solid var(--border);padding:8px 14px;border-radius:9px;"></select>
         <button class="refresh-btn" onclick="forceCopyBudget()" title="Copiar gastos fijos del mes anterior">↙ Copiar mes anterior</button>
+      </div>
+    </div>
+
+    <!-- GESTOR DE CATEGORÍAS -->
+    <div id="catManagerPanel" style="display:none;margin-bottom:20px;">
+      <div class="card" style="max-width:560px;">
+        <div class="card-title">⚙️ GESTIONAR CATEGORÍAS DE GASTOS</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;margin-bottom:16px;align-items:flex-end;">
+          <div>
+            <label>Nueva categoría</label>
+            <input type="text" id="newCatInput" placeholder="Nombre...">
+          </div>
+          <div>
+            <label>Grupo</label>
+            <select id="newCatGrupo">
+              <option value="Equipo">👥 Equipo</option>
+              <option value="Sede">🏢 Sede</option>
+              <option value="Publicidad">📣 Publicidad</option>
+              <option value="Otros">📦 Otros</option>
+            </select>
+          </div>
+          <button class="btn-primary" style="width:auto;padding:11px 18px;margin:0;" onclick="addExpenseCat()">+ Agregar</button>
+        </div>
+        <div id="expenseCatsList"></div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:12px;">💡 "Programas" no se puede eliminar porque tiene función especial.</div>
       </div>
     </div>
 
@@ -478,25 +504,6 @@
         <div style="flex:1; min-width:160px;">
           <label>Categoría</label>
           <select id="bCat" onchange="onBudgetCatChange()">
-            <option>Jhonfer</option>
-            <option>Yamid</option>
-            <option>Hugo</option>
-            <option>Alex</option>
-            <option>Músicos</option>
-            <option>Practicantes</option>
-            <option>Arriendo</option>
-            <option>Servicios</option>
-            <option>Internet</option>
-            <option>Aseo</option>
-            <option>Caja Menor</option>
-            <option>Ads CS</option>
-            <option>Ads Clientes</option>
-            <option>Juanpa y Valen</option>
-            <option>Programas</option>
-            <option>Eps</option>
-            <option>Ahorro Inversión</option>
-            <option>Diezmo</option>
-            <option>Deudas</option>
           </select>
         </div>
         <div style="flex:1; min-width:120px;">
@@ -994,6 +1001,14 @@ async function loadData() {
       if (config && config.pct) {
         localStorage.setItem('cs_pct', JSON.stringify(config.pct));
       }
+      if (config && config.expenseCats && config.expenseCats.length > 0) {
+        EXPENSE_CATS = config.expenseCats;
+        localStorage.setItem('cs_expense_cats', JSON.stringify(EXPENSE_CATS));
+        updateAllCatSelects();
+      }
+      if (config && config.grupos) {
+        localStorage.setItem('cs_grupos', JSON.stringify(config.grupos));
+      }
     } catch(e) {}
 
     setSyncStatus('ok');
@@ -1051,12 +1066,104 @@ const INCOME_CATS = [
   'Clases de Música','Song Mission','Comunidad Skool','Secuencia','Extras de Grabación'
 ];
 
-const EXPENSE_CATS = [
+const DEFAULT_EXPENSE_CATS = [
   'Jhonfer','Yamid','Hugo','Alex','Músicos','Practicantes',
   'Arriendo','Servicios','Internet','Aseo',
   'Caja Menor','Ads CS','Ads Clientes','Juanpa y Valen',
   'Programas','Eps','Diezmo','Ahorro Bóveda','Ahorro Inversión'
 ];
+
+let EXPENSE_CATS = JSON.parse(localStorage.getItem('cs_expense_cats') || JSON.stringify(DEFAULT_EXPENSE_CATS));
+
+function saveExpenseCats() {
+  localStorage.setItem('cs_expense_cats', JSON.stringify(EXPENSE_CATS));
+  // Sincronizar con Sheet
+  saveConfig();
+}
+
+function addExpenseCat() {
+  const input = document.getElementById('newCatInput');
+  const grupo = document.getElementById('newCatGrupo').value;
+  const name = input.value.trim();
+  if (!name) { showToast('Escribe el nombre de la categoría.', 'error'); return; }
+  if (EXPENSE_CATS.includes(name)) { showToast('Esa categoría ya existe.', 'error'); return; }
+
+  EXPENSE_CATS.push(name);
+  saveExpenseCats();
+
+  // Agregar al grupo correspondiente
+  const grupos = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || window._currentGrupos;
+  if (grupos[grupo]) {
+    grupos[grupo].cats.push(name);
+    localStorage.setItem('cs_grupos', JSON.stringify(grupos));
+    saveConfig();
+  }
+
+  input.value = '';
+  renderExpenseCatsList();
+  updateAllCatSelects();
+  renderBudget();
+  showToast(`✓ "${name}" agregada al grupo ${grupo}`);
+}
+
+function deleteExpenseCat(cat, grupo) {
+  if (!confirm(`¿Eliminar la categoría "${cat}"?`)) return;
+  EXPENSE_CATS = EXPENSE_CATS.filter(c => c !== cat);
+  saveExpenseCats();
+
+  // Quitar del grupo
+  const grupos = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || window._currentGrupos;
+  if (grupos[grupo]) {
+    grupos[grupo].cats = grupos[grupo].cats.filter(c => c !== cat);
+    localStorage.setItem('cs_grupos', JSON.stringify(grupos));
+    saveConfig();
+  }
+
+  renderExpenseCatsList();
+  updateAllCatSelects();
+  renderBudget();
+  showToast(`Categoría "${cat}" eliminada`);
+}
+
+function renderExpenseCatsList() {
+  const list = document.getElementById('expenseCatsList');
+  if (!list) return;
+  const grupos = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || window._currentGrupos || {};
+  const grupoLabels = { Equipo:'👥 Equipo', Sede:'🏢 Sede', Publicidad:'📣 Publicidad', Otros:'📦 Otros' };
+  const grupoColors = { Equipo:'#22d3ee', Sede:'#60a5fa', Publicidad:'#fbbf24', Otros:'#34d399' };
+
+  let html = '';
+  for (const [gName, cfg] of Object.entries(grupos)) {
+    if (!cfg.cats || !cfg.cats.length) continue;
+    html += `<div style="margin-bottom:12px;">
+      <div style="font-size:0.72rem;font-weight:700;color:${grupoColors[gName]||'var(--muted)'};letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;">${grupoLabels[gName]||gName}</div>
+      ${cfg.cats.map(cat => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--surface2);border-radius:7px;margin-bottom:4px;">
+          <span style="font-size:0.85rem;">${cat}</span>
+          ${cat === 'Programas' ? '<span style="font-size:0.7rem;color:var(--muted);">fijo</span>' : `<button class="delete-btn" onclick="deleteExpenseCat('${cat}','${gName}')">✕</button>`}
+        </div>
+      `).join('')}
+    </div>`;
+  }
+  list.innerHTML = html || '<div style="color:var(--muted);font-size:0.85rem;">Sin categorías.</div>';
+}
+
+function updateAllCatSelects() {
+  // Actualizar selector de categorías en formulario de transacción
+  const fCat = document.getElementById('fCat');
+  if (fCat && selectedType === 'expense') {
+    const cur = fCat.value;
+    fCat.innerHTML = '<option value="">— Seleccionar —</option>' + EXPENSE_CATS.map(c => `<option>${c}</option>`).join('');
+    if (cur) fCat.value = cur;
+  }
+  // Actualizar selector de presupuesto
+  const bCat = document.getElementById('bCat');
+  if (bCat) {
+    const cur = bCat.value;
+    bCat.innerHTML = EXPENSE_CATS.map(c => `<option>${c}</option>`).join('');
+    if (cur) bCat.value = cur;
+  }
+}
 
 function onCatChange() {
   const cat = document.getElementById('fCat').value;
@@ -1478,6 +1585,15 @@ function getArtistaDesc() {
   return '';
 }
 
+function toggleCatManager() {
+  const panel = document.getElementById('catManagerPanel');
+  const btn = document.getElementById('btnCatManager');
+  const visible = panel.style.display !== 'none';
+  panel.style.display = visible ? 'none' : 'block';
+  btn.textContent = visible ? '⚙️ Gestionar categorías' : '✕ Cerrar';
+  if (!visible) renderExpenseCatsList();
+}
+
 function onBudgetCatChange() {
   const cat = document.getElementById('bCat').value;
   const card = document.getElementById('programasCard');
@@ -1622,7 +1738,7 @@ function renderBudget() {
   const empty = document.getElementById('budgetEmpty');
   empty.style.display = 'none';
 
-  const GRUPOS = {
+  const GRUPOS = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || {
     'Equipo': {
       cats: ['Jhonfer','Yamid','Hugo','Alex','Músicos','Practicantes','Juanpa y Valen'],
       color: '#22d3ee', bg: 'rgba(34,211,238,0.08)', border: 'rgba(34,211,238,0.3)', label: '👥 Equipo'
@@ -1640,6 +1756,7 @@ function renderBudget() {
       color: '#34d399', bg: 'rgba(52,211,153,0.08)', border: 'rgba(52,211,153,0.3)', label: '📦 Otros'
     }
   };
+  window._currentGrupos = GRUPOS;
 
   const buildCard = (cat, groupColor) => {
     const limit = mb[cat] || 0;
@@ -1790,9 +1907,10 @@ function saveClientes() {
 
 function saveConfig() {
   const pct = JSON.parse(localStorage.getItem('cs_pct') || '{}');
+  const grupos = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || window._currentGrupos || {};
   fetch(SCRIPT_URL, {
     method: 'POST',
-    body: JSON.stringify({ action: 'saveConfig', budgets, pct })
+    body: JSON.stringify({ action: 'saveConfig', budgets, pct, expenseCats: EXPENSE_CATS, grupos })
   }).catch(() => {});
 }
 
@@ -2484,6 +2602,7 @@ function deletePago(clienteId, pagoId) {
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 document.getElementById('fDate').value = new Date().toISOString().slice(0,10);
+updateAllCatSelects();
 // Cargar porcentajes guardados
 const savedPct = JSON.parse(localStorage.getItem('cs_pct') || '{}');
 if (savedPct.diezmo && document.getElementById('pctDiezmo')) document.getElementById('pctDiezmo').value = savedPct.diezmo;
