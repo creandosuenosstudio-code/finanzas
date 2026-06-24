@@ -1017,8 +1017,7 @@ async function loadData() {
       }
       if (config && config.grupos) {
         localStorage.setItem('cs_grupos', JSON.stringify(config.grupos));
-      }
-    } catch(e) {}
+      }    } catch(e) {}
 
     setSyncStatus('ok');
     populateMonthSelectors();
