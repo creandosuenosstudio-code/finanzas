@@ -96,7 +96,7 @@
   .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--card-radius); padding: 24px; }
   .kpi-label { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
   .kpi-value { font-family: 'Space Grotesk', sans-serif; font-size: 1.9rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
-  .kpi-value.green { color: var(--green); }
+  .kpi-value.yellow { color: var(--yellow); }
   .kpi-value.red { color: var(--red); }
   .kpi-value.purple { color: var(--accent2); }
   .kpi-sub { font-size: 0.78rem; color: var(--muted); margin-top: 8px; }
@@ -651,7 +651,7 @@
     </div>
 
     <!-- STATS RÁPIDOS -->
-    <div class="kpi-row" style="margin-bottom:24px;">
+    <div class="kpi-row" style="margin-bottom:24px;grid-template-columns:repeat(4,1fr);">
       <div class="kpi">
         <div class="kpi-label">Clientes activos</div>
         <div class="kpi-value purple" id="statActivos">0</div>
@@ -659,6 +659,10 @@
       <div class="kpi">
         <div class="kpi-label">En mora</div>
         <div class="kpi-value red" id="statMora">0</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">En pausa</div>
+        <div class="kpi-value yellow" id="statPausa">0</div>
       </div>
       <div class="kpi">
         <div class="kpi-label">En mora — cuotas vencidas</div>
@@ -865,8 +869,9 @@
           <div id="fichaInfo" style="margin-bottom:24px;"></div>
 
           <!-- Registrar pago -->
-          <div style="background:var(--surface2);border-radius:10px;padding:16px;margin-bottom:24px;">
-            <div style="font-size:0.8rem;font-weight:600;color:var(--accent2);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px;">Registrar nuevo pago</div>
+          <div style="background:var(--surface2);border-radius:10px;padding:16px;margin-bottom:16px;">
+            <div style="font-size:0.8rem;font-weight:600;color:var(--accent2);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px;">📅 Registrar cuota mensual</div>
+            <div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;">Marca este mes como pagado y quita la mora si existía.</div>
             <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
               <div style="flex:1;min-width:120px;">
                 <label>Monto</label>
@@ -880,7 +885,28 @@
                 <label>Medio de pago</label>
                 <input type="text" id="pagoMedio" placeholder="Nequi, PayPal...">
               </div>
-              <button class="btn-primary" style="width:auto;padding:11px 20px;" onclick="registrarPago()">+ Registrar</button>
+              <button class="btn-primary" style="width:auto;padding:11px 20px;" onclick="registrarPago('cuota')">+ Registrar cuota</button>
+            </div>
+          </div>
+
+          <!-- Abono al capital -->
+          <div style="background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.2);border-radius:10px;padding:16px;margin-bottom:24px;">
+            <div style="font-size:0.8rem;font-weight:600;color:var(--green);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px;">💰 Abono al capital</div>
+            <div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;">Reduce el saldo del contrato pero <strong>no cuenta como cuota mensual</strong>. El artista sigue debiendo su cuota del mes.</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+              <div style="flex:1;min-width:120px;">
+                <label>Monto</label>
+                <input type="text" id="abonoMonto" placeholder="0" oninput="fmtInput(this)" inputmode="numeric">
+              </div>
+              <div style="flex:1;min-width:120px;">
+                <label>Fecha</label>
+                <input type="date" id="abonoFecha">
+              </div>
+              <div style="flex:1;min-width:120px;">
+                <label>Medio de pago</label>
+                <input type="text" id="abonoMedio" placeholder="Nequi, PayPal...">
+              </div>
+              <button class="btn-primary" style="width:auto;padding:11px 20px;background:var(--green);" onclick="registrarPago('capital')">+ Abonar capital</button>
             </div>
           </div>
 
@@ -2154,9 +2180,34 @@ function getSaldoPendiente(cliente) {
 }
 
 function getCuotaVencida(cliente) {
-  // Retorna solo la cuota mensual pactada si está en mora, no el total del contrato
   if (!isMora(cliente)) return 0;
-  return cliente.cuota || 0;
+  if (!cliente.cuota || !cliente.diaPago) return 0;
+
+  const hoy = new Date();
+  let mesesVencidos = 0;
+
+  // Revisar los últimos 12 meses como máximo
+  for (let i = 0; i < 12; i++) {
+    const fecha = new Date(hoy.getFullYear(), hoy.getMonth() - i, cliente.diaPago);
+    // Solo contar si ya venció (la fecha de pago ya pasó)
+    if (fecha > hoy) continue;
+    // Solo contar desde el mes de inicio de cobro
+    if (cliente.mesInicioCobro) {
+      const inicioStr = cliente.mesInicioCobro;
+      const fechaStr = `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,'0')}`;
+      if (fechaStr < inicioStr) break;
+    }
+    // Ver si pagó ese mes
+    const pagadoEseMes = (cliente.pagos || []).some(p => {
+      if (p.tipo === 'capital') return false;
+      const fp = new Date(p.fecha);
+      return fp.getMonth() === fecha.getMonth() && fp.getFullYear() === fecha.getFullYear();
+    });
+    if (!pagadoEseMes) mesesVencidos++;
+    else break; // Si pagó ese mes, no seguir contando hacia atrás
+  }
+
+  return mesesVencidos * cliente.cuota;
 }
 
 function isMora(cliente) {
@@ -2170,8 +2221,9 @@ function isMora(cliente) {
   // Si tiene mes de inicio de cobro y aún no ha llegado, no está en mora
   if (cliente.mesInicioCobro && mesActual < cliente.mesInicioCobro) return false;
 
-  // Verificar si ya pagó este mes
+  // Verificar si ya pagó la cuota este mes (no cuenta abono al capital)
   const pagoEsteMes = (cliente.pagos || []).some(p => {
+    if (p.tipo === 'capital') return false; // abono al capital no cuenta como cuota
     const fp = new Date(p.fecha);
     return fp.getMonth() === hoy.getMonth() && fp.getFullYear() === hoy.getFullYear();
   });
@@ -2183,7 +2235,7 @@ function getEstadoBadge(cliente) {
   if (cliente.estado === 'terminado') return `<span class="badge" style="background:rgba(136,136,160,0.15);color:var(--muted);">Terminado</span>`;
   if (cliente.estado === 'pausado') return `<span class="badge" style="background:rgba(251,191,36,0.15);color:var(--yellow);">Pausado</span>`;
   if (getSaldoPendiente(cliente) === 0) return `<span class="badge income">✓ Saldado</span>`;
-  if (isMora(cliente)) return `<span class="badge expense">⚠ En mora</span>`;
+  if (isMora(cliente)) return `<span class="badge expense">⚠ En mora · ${fmt(getCuotaVencida(cliente), cliente.moneda)}</span>`;
   return `<span class="badge" style="background:rgba(8,145,178,0.15);color:var(--accent2);">Activo</span>`;
 }
 
@@ -2232,6 +2284,7 @@ function renderClientes() {
   // Stats
   document.getElementById('statActivos').textContent = clientes.filter(c => c.estado === 'activo').length;
   document.getElementById('statMora').textContent = clientes.filter(c => isMora(c)).length;
+  document.getElementById('statPausa').textContent = clientes.filter(c => c.estado === 'pausado').length;
   // Cartera = solo cuotas vencidas de clientes en mora
   const carteraCOP = clientes.filter(c => (c.moneda||'COP')==='COP').reduce((s,c) => s + getCuotaVencida(c), 0);
   const carteraUSD = clientes.filter(c => c.moneda==='USD').reduce((s,c) => s + getCuotaVencida(c), 0);
@@ -2276,7 +2329,7 @@ function renderClientes() {
             <span>Total: ${fmt(c.total, c.moneda)}</span>
           </div>
         </div>
-        ${mora ? `<div style="font-size:0.75rem;color:var(--red);margin-top:8px;">⚠ Cuota del día ${c.diaPago} pendiente este mes</div>` : ''}
+        ${mora ? `<div style="font-size:0.75rem;color:var(--red);margin-top:8px;">⚠ Cuota vencida del día ${c.diaPago}: <strong>${fmt(getCuotaVencida(c), c.moneda)}</strong></div>` : ''}
       </div>
     `;
   }).join('');
@@ -2297,6 +2350,7 @@ function openFicha(id) {
   document.getElementById('fichaBar').style.width = pct + '%';
   document.getElementById('fichaBar').style.background = pct >= 100 ? 'var(--green)' : isMora(c) ? 'var(--red)' : 'var(--accent2)';
   document.getElementById('pagoFecha').value = new Date().toISOString().slice(0,10);
+  document.getElementById('abonoFecha').value = new Date().toISOString().slice(0,10);
 
   document.getElementById('fichaStats').innerHTML = `
     <div class="kpi" style="padding:16px;">
@@ -2333,7 +2387,12 @@ function openFicha(id) {
     ? pagos.map((p, i) => `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
         <div>
-          <div style="font-size:0.85rem;font-weight:500;">${p.fecha}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+            <div style="font-size:0.85rem;font-weight:500;">${p.fecha}</div>
+            ${p.tipo === 'capital'
+              ? `<span style="font-size:0.7rem;background:rgba(52,211,153,0.15);color:var(--green);padding:2px 8px;border-radius:20px;font-weight:600;">💰 Abono capital</span>`
+              : `<span style="font-size:0.7rem;background:rgba(8,145,178,0.15);color:var(--accent2);padding:2px 8px;border-radius:20px;font-weight:600;">📅 Cuota</span>`}
+          </div>
           <div style="font-size:0.75rem;color:var(--muted);">${p.medio||'—'} · ${p.registradoPor||'—'}${p.numRecibo ? ' · '+p.numRecibo : ''}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
@@ -2358,24 +2417,109 @@ function editCliente(id) {
   showClienteForm(id);
 }
 
-function registrarPago() {
-  const monto = parseAmt('pagoMonto');
-  const fecha = document.getElementById('pagoFecha').value;
-  const medio = document.getElementById('pagoMedio').value.trim();
+function registrarPago(tipo = 'cuota') {
+  const esCuota = tipo === 'cuota';
+  const monto = parseAmt(esCuota ? 'pagoMonto' : 'abonoMonto');
+  const fecha = document.getElementById(esCuota ? 'pagoFecha' : 'abonoFecha').value;
+  const medio = document.getElementById(esCuota ? 'pagoMedio' : 'abonoMedio').value.trim();
 
   if (!monto || !fecha) { showToast('Completa monto y fecha.', 'error'); return; }
 
   const c = clientes.find(x => x.id === currentClienteId);
   if (!c) return;
 
+  // Si es cuota y el monto supera la cuota pactada, preguntar qué hacer con el excedente
+  if (esCuota && c.cuota && monto > c.cuota) {
+    const excedente = monto - c.cuota;
+    const opcion = confirm(
+      `El pago es ${fmt(monto, c.moneda)} pero la cuota es ${fmt(c.cuota, c.moneda)}.\n\n` +
+      `Hay un excedente de ${fmt(excedente, c.moneda)}.\n\n` +
+      `✅ Aceptar = Adelanto de la próxima cuota (el próximo mes ya está pagado)\n` +
+      `❌ Cancelar = Abono al capital (reduce deuda, próxima cuota sigue igual)`
+    );
+
+    const esInicial = (c.pagos || []).length === 0;
+    const numRecibo = 'CS-' + Date.now().toString().slice(-6);
+
+    // Registrar la cuota normal
+    const pagoCuota = { id: Date.now().toString(), monto: c.cuota, fecha, medio, registradoPor: getWho(), numRecibo, tipo: 'cuota' };
+    c.pagos = c.pagos || [];
+    c.pagos.push(pagoCuota);
+
+    if (opcion) {
+      // Adelanto: marcar el próximo mes como pagado (con fecha del próximo mes)
+      const fechaActual = new Date(fecha);
+      const proximoMes = new Date(fechaActual.getFullYear(), fechaActual.getMonth() + 1, fechaActual.getDate());
+      const fechaProximo = proximoMes.toISOString().slice(0, 10);
+      const pagoAdelanto = {
+        id: (Date.now() + 1).toString(),
+        monto: excedente,
+        fecha: fechaProximo,
+        medio,
+        registradoPor: getWho(),
+        numRecibo: 'CS-' + (Date.now() + 1).toString().slice(-6),
+        tipo: 'cuota',
+        nota: 'Adelanto de cuota pagado el ' + fecha
+      };
+      c.pagos.push(pagoAdelanto);
+      showToast(`✓ Cuota registrada + próxima cuota adelantada (${fmt(excedente, c.moneda)})`);
+    } else {
+      // Abono al capital
+      const pagoCapital = {
+        id: (Date.now() + 1).toString(),
+        monto: excedente,
+        fecha,
+        medio,
+        registradoPor: getWho(),
+        numRecibo: 'CS-' + (Date.now() + 1).toString().slice(-6),
+        tipo: 'capital'
+      };
+      c.pagos.push(pagoCapital);
+      showToast(`✓ Cuota + abono al capital de ${fmt(excedente, c.moneda)}`);
+    }
+
+    // Registrar el ingreso total en finanzas (todo en este mes)
+    registrarIngresoCliente(c, monto, fecha, medio);
+    saveClientes();
+    document.getElementById(esCuota ? 'pagoMonto' : 'abonoMonto').value = '';
+    document.getElementById(esCuota ? 'pagoMedio' : 'abonoMedio').value = '';
+    openFicha(currentClienteId);
+    renderClientes();
+
+    const numReciboFinal = 'CS-' + Date.now().toString().slice(-6);
+    const pagoRecibo = { ...pagoCuota, monto, numRecibo: numReciboFinal };
+    setTimeout(() => generarRecibo(c, pagoRecibo, esInicial), 300);
+    return;
+  }
+
+  // Pago normal sin excedente
   const esInicial = (c.pagos || []).length === 0;
   const numRecibo = 'CS-' + Date.now().toString().slice(-6);
-  const pago = { id: Date.now().toString(), monto, fecha, medio, registradoPor: getWho(), numRecibo };
+  const pago = {
+    id: Date.now().toString(),
+    monto, fecha, medio,
+    registradoPor: getWho(),
+    numRecibo,
+    tipo: esCuota ? 'cuota' : 'capital'
+  };
   c.pagos = c.pagos || [];
   c.pagos.push(pago);
   saveClientes();
 
   registrarIngresoCliente(c, monto, fecha, medio);
+
+  document.getElementById(esCuota ? 'pagoMonto' : 'abonoMonto').value = '';
+  document.getElementById(esCuota ? 'pagoMedio' : 'abonoMedio').value = '';
+
+  showToast(esCuota
+    ? `✓ Cuota de ${fmt(monto)} registrada`
+    : `✓ Abono al capital de ${fmt(monto)} registrado`
+  );
+  openFicha(currentClienteId);
+  renderClientes();
+
+  setTimeout(() => generarRecibo(c, pago, esInicial), 300);
+}
 
   document.getElementById('pagoMonto').value = '';
   document.getElementById('pagoMedio').value = '';
