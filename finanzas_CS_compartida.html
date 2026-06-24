@@ -1043,7 +1043,8 @@ async function loadData() {
       }
       if (config && config.grupos) {
         localStorage.setItem('cs_grupos', JSON.stringify(config.grupos));
-      }    } catch(e) {}
+      }
+    } catch(e) {}
 
     setSyncStatus('ok');
     populateMonthSelectors();
@@ -2179,35 +2180,43 @@ function getSaldoPendiente(cliente) {
   return Math.max(cliente.total - getTotalPagado(cliente), 0);
 }
 
+function getPagadoEnMes(cliente, mes, anio) {
+  return (cliente.pagos || [])
+    .filter(p => {
+      if (p.tipo === 'capital') return false;
+      const fp = new Date(p.fecha);
+      return fp.getMonth() === mes && fp.getFullYear() === anio;
+    })
+    .reduce((s, p) => s + p.monto, 0);
+}
+
 function getCuotaVencida(cliente) {
   if (!isMora(cliente)) return 0;
   if (!cliente.cuota || !cliente.diaPago) return 0;
 
   const hoy = new Date();
-  let mesesVencidos = 0;
+  let totalVencido = 0;
 
-  // Revisar los últimos 12 meses como máximo
   for (let i = 0; i < 12; i++) {
     const fecha = new Date(hoy.getFullYear(), hoy.getMonth() - i, cliente.diaPago);
-    // Solo contar si ya venció (la fecha de pago ya pasó)
     if (fecha > hoy) continue;
-    // Solo contar desde el mes de inicio de cobro
+
     if (cliente.mesInicioCobro) {
-      const inicioStr = cliente.mesInicioCobro;
       const fechaStr = `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,'0')}`;
-      if (fechaStr < inicioStr) break;
+      if (fechaStr < cliente.mesInicioCobro) break;
     }
-    // Ver si pagó ese mes
-    const pagadoEseMes = (cliente.pagos || []).some(p => {
-      if (p.tipo === 'capital') return false;
-      const fp = new Date(p.fecha);
-      return fp.getMonth() === fecha.getMonth() && fp.getFullYear() === fecha.getFullYear();
-    });
-    if (!pagadoEseMes) mesesVencidos++;
-    else break; // Si pagó ese mes, no seguir contando hacia atrás
+
+    const pagadoEseMes = getPagadoEnMes(cliente, fecha.getMonth(), fecha.getFullYear());
+    const faltante = Math.max((cliente.cuota || 0) - pagadoEseMes, 0);
+
+    if (faltante > 0) {
+      totalVencido += faltante;
+    } else {
+      break;
+    }
   }
 
-  return mesesVencidos * cliente.cuota;
+  return totalVencido;
 }
 
 function isMora(cliente) {
@@ -2218,17 +2227,13 @@ function isMora(cliente) {
   const hoy = new Date();
   const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
 
-  // Si tiene mes de inicio de cobro y aún no ha llegado, no está en mora
   if (cliente.mesInicioCobro && mesActual < cliente.mesInicioCobro) return false;
 
-  // Verificar si ya pagó la cuota este mes (no cuenta abono al capital)
-  const pagoEsteMes = (cliente.pagos || []).some(p => {
-    if (p.tipo === 'capital') return false; // abono al capital no cuenta como cuota
-    const fp = new Date(p.fecha);
-    return fp.getMonth() === hoy.getMonth() && fp.getFullYear() === hoy.getFullYear();
-  });
+  // Verificar si pagó la cuota COMPLETA este mes
+  const pagadoEsteMes = getPagadoEnMes(cliente, hoy.getMonth(), hoy.getFullYear());
+  const cuotaCubierta = pagadoEsteMes >= (cliente.cuota || 0);
 
-  return hoy.getDate() > cliente.diaPago && !pagoEsteMes;
+  return hoy.getDate() > cliente.diaPago && !cuotaCubierta;
 }
 
 function getEstadoBadge(cliente) {
@@ -2518,17 +2523,6 @@ function registrarPago(tipo = 'cuota') {
   openFicha(currentClienteId);
   renderClientes();
 
-  setTimeout(() => generarRecibo(c, pago, esInicial), 300);
-}
-
-  document.getElementById('pagoMonto').value = '';
-  document.getElementById('pagoMedio').value = '';
-
-  showToast(`✓ Pago de ${fmt(monto)} registrado`);
-  openFicha(currentClienteId);
-  renderClientes();
-
-  // Mostrar opción de descargar recibo
   setTimeout(() => generarRecibo(c, pago, esInicial), 300);
 }
 
