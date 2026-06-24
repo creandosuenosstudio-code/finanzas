@@ -675,6 +675,11 @@
             <div style="font-size:0.68rem;color:var(--muted);font-weight:600;letter-spacing:0.06em;margin-bottom:2px;">🇺🇸 DÓLAR</div>
             <div class="kpi-value red" id="statCarteraUSD" style="font-size:1.5rem;">USD $0</div>
           </div>
+          <div style="padding-top:8px;border-top:1px solid var(--border);">
+            <div style="font-size:0.68rem;color:var(--muted);font-weight:600;letter-spacing:0.06em;margin-bottom:2px;">📊 TOTAL EN COP (aprox.)</div>
+            <div class="kpi-value red" id="statCarteraTotal" style="font-size:1.1rem;">$0</div>
+            <div style="font-size:0.68rem;color:var(--muted);margin-top:2px;" id="statCarteraTasa"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -2295,6 +2300,14 @@ function renderClientes() {
   const carteraUSD = clientes.filter(c => c.moneda==='USD').reduce((s,c) => s + getCuotaVencida(c), 0);
   document.getElementById('statCartera').textContent = fmt(carteraCOP);
   document.getElementById('statCarteraUSD').textContent = fmt(carteraUSD, 'USD');
+  const carteraUSDenCOP = convertirACOP(carteraUSD, 'USD');
+  const carteraTotal = carteraCOP + carteraUSDenCOP;
+  if (document.getElementById('statCarteraTotal')) {
+    document.getElementById('statCarteraTotal').textContent = fmt(carteraTotal);
+    if (document.getElementById('statCarteraTasa')) {
+      document.getElementById('statCarteraTasa').textContent = tasaUSD && carteraUSD > 0 ? `Tasa: ${fmt(tasaUSD)}/USD` : '';
+    }
+  }
 
   const list = document.getElementById('clientesList');
   if (!filtered.length) {
