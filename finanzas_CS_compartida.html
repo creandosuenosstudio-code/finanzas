@@ -727,6 +727,22 @@
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div class="form-group">
+              <label>Tipo de documento</label>
+              <select id="cTipoDoc">
+                <option value="C.C.">Cédula de Ciudadanía (C.C.)</option>
+                <option value="Pasaporte">Pasaporte</option>
+                <option value="C.E.">Cédula de Extranjería (C.E.)</option>
+                <option value="NIT">NIT</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Número de documento</label>
+              <input type="text" id="cNumDoc" placeholder="Ej: 1.144.103.167">
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group">
               <label>Cumpleaños (artista 1)</label>
               <input type="date" id="cCumple">
             </div>
@@ -860,8 +876,10 @@
               <div id="fichaName" style="font-family:'Space Grotesk';font-size:1.4rem;font-weight:700;"></div>
               <div id="fichaService" style="color:var(--muted);font-size:0.85rem;margin-top:4px;"></div>
             </div>
-            <div style="display:flex;gap:8px;align-items:center;">
-              <button onclick="editCliente(currentClienteId)" class="refresh-btn" style="padding:7px 14px;font-size:0.8rem;">✏️ Editar</button>
+            <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+              <button onclick="generarContrato(currentClienteId)" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:0.78rem;font-weight:700;cursor:pointer;">📄 Contrato</button>
+              <button onclick="editCliente(currentClienteId)" class="refresh-btn" style="padding:7px 12px;font-size:0.8rem;">✏️ Editar</button>
+              <button onclick="deleteCliente(currentClienteId)" style="background:none;border:none;color:var(--red);font-size:1.1rem;cursor:pointer;" title="Eliminar artista">🗑</button>
               <button onclick="closeFicha()" style="background:none;border:none;color:var(--muted);font-size:1.4rem;cursor:pointer;">✕</button>
             </div>
           </div>
@@ -953,12 +971,6 @@
           </div>
             <div style="font-size:0.8rem;font-weight:600;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px;">Historial de pagos</div>
             <div id="fichaPagos"></div>
-          </div>
-
-          <div style="display:flex;gap:10px;margin-top:20px;position:sticky;bottom:0;background:var(--surface);padding:12px 0 4px;">
-            <button class="btn-primary" style="flex:1;" onclick="editCliente(currentClienteId)">✏️ Editar artista</button>
-            <button class="btn-primary" style="flex:1;background:var(--green);" onclick="generarContrato(currentClienteId)">📄 Generar contrato</button>
-            <button class="refresh-btn" onclick="deleteCliente(currentClienteId)" style="color:var(--red);border-color:rgba(248,113,113,0.3);">🗑</button>
           </div>
         </div>
       </div>
@@ -2237,7 +2249,7 @@ function generarContrato(clienteId) {
 <table>
   <tr><td>CONTRATO No.</td><td>${numContrato}</td></tr>
   <tr><td>CONTRATANTE:</td><td>${c.nombre}</td></tr>
-  <tr><td>NIT o C.C</td><td>___________________________</td></tr>
+  <tr><td>NIT o C.C</td><td>${c.tipoDoc || 'C.C.'} ${c.numDoc || '___________________________'}</td></tr>
   <tr><td>CONTRATISTA:</td><td>CREANDO SUEÑOS STUDIO</td></tr>
   <tr><td>NIT</td><td>901689412</td></tr>
   <tr><td>REPRESENTANTE LEGAL</td><td>JUAN PABLO MONDRAGÓN</td></tr>
@@ -2252,7 +2264,7 @@ function generarContrato(clienteId) {
 </table>
 
 <div class="clausula">
-Entre los suscritos a saber, <strong>${c.nombre}</strong> identificado con No. CC ___________________________ persona quien para efectos del presente contrato se denominará <strong>EL CONTRATANTE</strong> por una parte y por otra, <strong>JUAN PABLO MONDRAGÓN</strong>, identificado con la cédula de ciudadanía No. 1.144.103.167 expedida en Cali (V), representante legal de CREANDO SUEÑOS STUDIO CON NIT 901689412, quien para los efectos del presente contrato se denominará <strong>EL CONTRATISTA</strong>, hemos acordado celebrar el presente Contrato de Prestación de Servicios el cual se regirá por las siguientes cláusulas:
+Entre los suscritos a saber, <strong>${c.nombre}</strong> identificado con ${c.tipoDoc || 'C.C.'} No. <strong>${c.numDoc || '___________________________'}</strong> persona quien para efectos del presente contrato se denominará <strong>EL CONTRATANTE</strong> por una parte y por otra, <strong>JUAN PABLO MONDRAGÓN</strong>, identificado con la cédula de ciudadanía No. 1.144.103.167 expedida en Cali (V), representante legal de CREANDO SUEÑOS STUDIO CON NIT 901689412, quien para los efectos del presente contrato se denominará <strong>EL CONTRATISTA</strong>, hemos acordado celebrar el presente Contrato de Prestación de Servicios el cual se regirá por las siguientes cláusulas:
 </div>
 
 <div class="clausula">
@@ -2300,7 +2312,7 @@ Para constancia se firma en dos ejemplares del mismo tenor, en Santiago de Cali 
     <strong>EL CONTRATANTE</strong>
     <div class="firma-linea">
       ${c.nombre}<br>
-      C.C. ___________________________
+      ${c.tipoDoc || 'C.C.'} ${c.numDoc || '___________________________'}
     </div>
   </div>
   <div class="firma-bloque">
@@ -2662,6 +2674,8 @@ function showClienteForm(id = null) {
       document.getElementById('cNombreArt').value = c.nombreArt || '';
       document.getElementById('cCorreo').value = c.correo || '';
       document.getElementById('cPais').value = c.pais || '';
+      document.getElementById('cTipoDoc').value = c.tipoDoc || 'C.C.';
+      document.getElementById('cNumDoc').value = c.numDoc || '';
       document.getElementById('cCumple').value = c.cumple || '';
       document.getElementById('cCumple2').value = c.cumple2 || '';
       document.getElementById('cPaisCodigo').value = c.paisCodigo || '+57';
@@ -2682,7 +2696,8 @@ function showClienteForm(id = null) {
       document.getElementById('cNotas').value = c.notas || '';
     }
   } else {
-    ['cNombre','cNombreArt','cCorreo','cPais','cWhatsapp','cCanciones','cValorCancion','cTotal','cInicial','cInicialMedio','cAbonoHistorico','cCuota','cDiaPago','cNotas'].forEach(id => document.getElementById(id).value = '');
+    ['cNombre','cNombreArt','cCorreo','cPais','cNumDoc','cWhatsapp','cCanciones','cValorCancion','cTotal','cInicial','cInicialMedio','cAbonoHistorico','cCuota','cDiaPago','cNotas'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('cTipoDoc').value = 'C.C.';
     document.getElementById('cMesInicioCobro').value = '';
     document.getElementById('cCumple').value = '';
     document.getElementById('cCumple2').value = '';
@@ -2709,6 +2724,8 @@ function saveCliente() {
     nombreArt: document.getElementById('cNombreArt').value.trim(),
     correo: document.getElementById('cCorreo').value.trim(),
     pais: document.getElementById('cPais').value.trim(),
+    tipoDoc: document.getElementById('cTipoDoc').value,
+    numDoc: document.getElementById('cNumDoc').value.trim(),
     cumple: document.getElementById('cCumple').value,
     cumple2: document.getElementById('cCumple2').value,
     paisCodigo: document.getElementById('cPaisCodigo').value,
