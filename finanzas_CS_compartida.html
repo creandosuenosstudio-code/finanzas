@@ -2070,12 +2070,12 @@ function showClienteForm(id = null) {
       document.getElementById('cServicio').value = c.servicio || '';
       document.getElementById('cMoneda').value = c.moneda || 'COP';
       document.getElementById('cCanciones').value = c.canciones || '';
-      document.getElementById('cValorCancion').value = c.valorCancion || '';
-      document.getElementById('cTotal').value = c.total || '';
-      document.getElementById('cInicial').value = c.inicial || '';
+      document.getElementById('cValorCancion').value = c.valorCancion ? new Intl.NumberFormat('es-CO').format(c.valorCancion) : '';
+      document.getElementById('cTotal').value = c.total ? new Intl.NumberFormat('es-CO').format(c.total) : '';
+      document.getElementById('cInicial').value = c.inicial ? new Intl.NumberFormat('es-CO').format(c.inicial) : '';
       document.getElementById('cInicialMedio').value = c.inicialMedio || '';
       document.getElementById('cAbonoHistorico').value = c.abonoHistorico ? new Intl.NumberFormat('es-CO').format(c.abonoHistorico) : '';
-      document.getElementById('cCuota').value = c.cuota || '';
+      document.getElementById('cCuota').value = c.cuota ? new Intl.NumberFormat('es-CO').format(c.cuota) : '';
       document.getElementById('cDiaPago').value = c.diaPago || '';
       document.getElementById('cMesInicioCobro').value = c.mesInicioCobro || '';
       document.getElementById('cFechaInicio').value = c.fechaInicio || '';
@@ -2118,7 +2118,7 @@ function saveCliente() {
     servicio: document.getElementById('cServicio').value,
     moneda: document.getElementById('cMoneda').value,
     canciones: parseFloat(document.getElementById('cCanciones').value) || 0,
-    valorCancion: parseFloat(document.getElementById('cValorCancion').value) || 0,
+    valorCancion: parseAmt('cValorCancion'),
     total: parseAmt('cTotal'),
     inicial: parseAmt('cInicial'),
     inicialMedio: document.getElementById('cInicialMedio').value.trim(),
@@ -2234,11 +2234,27 @@ function isMora(cliente) {
 
   if (cliente.mesInicioCobro && mesActual < cliente.mesInicioCobro) return false;
 
-  // Verificar si pagó la cuota COMPLETA este mes
-  const pagadoEsteMes = getPagadoEnMes(cliente, hoy.getMonth(), hoy.getFullYear());
-  const cuotaCubierta = pagadoEsteMes >= (cliente.cuota || 0);
+  // Revisar los últimos 12 meses — si alguno tiene cuota pendiente, está en mora
+  for (let i = 0; i < 12; i++) {
+    const fecha = new Date(hoy.getFullYear(), hoy.getMonth() - i, cliente.diaPago);
+    
+    // Solo contar meses donde ya venció el día de pago
+    if (fecha > hoy) continue;
 
-  return hoy.getDate() > cliente.diaPago && !cuotaCubierta;
+    // Solo desde el mes de inicio de cobro
+    if (cliente.mesInicioCobro) {
+      const fechaStr = `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,'0')}`;
+      if (fechaStr < cliente.mesInicioCobro) break;
+    }
+
+    const pagadoEseMes = getPagadoEnMes(cliente, fecha.getMonth(), fecha.getFullYear());
+    const cuotaCubierta = pagadoEseMes >= (cliente.cuota || 0);
+
+    if (!cuotaCubierta) return true; // Tiene al menos un mes sin pagar → en mora
+    else break; // Pagó ese mes completo → no seguir revisando hacia atrás
+  }
+
+  return false;
 }
 
 function getEstadoBadge(cliente) {
