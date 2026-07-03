@@ -308,6 +308,12 @@
       </div>
     </div>
 
+    <!-- ALERTAS DE CUMPLEAÑOS -->
+    <div class="card" id="birthdayCard" style="margin-bottom:20px;display:none;border-color:rgba(251,191,36,0.3);background:rgba(251,191,36,0.05);">
+      <div class="card-title" style="color:var(--yellow);">🎂 CUMPLEAÑOS ESTA SEMANA</div>
+      <div id="birthdayList"></div>
+    </div>
+
     <div class="card">
       <div class="card-title">ÚLTIMAS TRANSACCIONES</div>
       <div class="tx-list" id="recentList"></div>
@@ -951,7 +957,8 @@
 
           <div style="display:flex;gap:10px;margin-top:20px;position:sticky;bottom:0;background:var(--surface);padding:12px 0 4px;">
             <button class="btn-primary" style="flex:1;" onclick="editCliente(currentClienteId)">✏️ Editar artista</button>
-            <button class="refresh-btn" onclick="deleteCliente(currentClienteId)" style="flex:1;text-align:center;color:var(--red);border-color:rgba(248,113,113,0.3);">🗑 Eliminar</button>
+            <button class="btn-primary" style="flex:1;background:var(--green);" onclick="generarContrato(currentClienteId)">📄 Generar contrato</button>
+            <button class="refresh-btn" onclick="deleteCliente(currentClienteId)" style="color:var(--red);border-color:rgba(248,113,113,0.3);">🗑</button>
           </div>
         </div>
       </div>
@@ -1506,6 +1513,7 @@ function renderDashboard() {
   renderBarChart();
   renderPieChart(month);
   renderRecent();
+  renderBirthdays();
 }
 
 function getLast6Months() {
@@ -1570,6 +1578,67 @@ function renderPieChart(month) {
       plugins: { legend: { position: 'bottom', labels: { color: '#8888a0', font: { family: 'Inter', size: 11 }, padding: 12 } } }
     }
   });
+}
+
+function renderBirthdays() {
+  const hoy = new Date();
+  const enSieteDias = new Date(hoy.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const cumples = [];
+
+  clientes.forEach(c => {
+    [c.cumple, c.cumple2].forEach((fecha, idx) => {
+      if (!fecha) return;
+      const [anio, mes, dia] = fecha.split('-').map(Number);
+      // Cumpleaños este año
+      const cumpleEsteAnio = new Date(hoy.getFullYear(), mes - 1, dia);
+      // Si ya pasó este año, mirar el próximo
+      if (cumpleEsteAnio < hoy) cumpleEsteAnio.setFullYear(hoy.getFullYear() + 1);
+
+      if (cumpleEsteAnio <= enSieteDias) {
+        const diasRestantes = Math.ceil((cumpleEsteAnio - hoy) / (1000 * 60 * 60 * 24));
+        cumples.push({
+          nombre: c.nombre + (idx === 1 ? ' (Artista 2)' : ''),
+          fecha: `${dia}/${mes}`,
+          diasRestantes,
+          esHoy: diasRestantes === 0,
+          whatsapp: c.whatsapp || ''
+        });
+      }
+    });
+  });
+
+  const card = document.getElementById('birthdayCard');
+  const list = document.getElementById('birthdayList');
+  if (!card || !list) return;
+
+  if (!cumples.length) {
+    card.style.display = 'none';
+    return;
+  }
+
+  card.style.display = 'block';
+  cumples.sort((a, b) => a.diasRestantes - b.diasRestantes);
+
+  list.innerHTML = cumples.map(c => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(251,191,36,0.15);">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="font-size:1.5rem;">${c.esHoy ? '🎉' : '🎂'}</div>
+        <div>
+          <div style="font-weight:600;font-size:0.9rem;">${c.nombre}</div>
+          <div style="font-size:0.75rem;color:var(--muted);">
+            ${c.esHoy ? '¡Hoy es su cumpleaños!' : `En ${c.diasRestantes} día${c.diasRestantes>1?'s':''} · ${c.fecha}`}
+          </div>
+        </div>
+      </div>
+      ${c.whatsapp ? `
+        <a href="https://wa.me/${c.whatsapp.replace(/[^0-9]/g,'')}" target="_blank"
+           style="background:rgba(52,211,153,0.15);color:var(--green);border:1px solid rgba(52,211,153,0.3);
+                  border-radius:8px;padding:6px 12px;font-size:0.78rem;font-weight:600;text-decoration:none;">
+          💬 Saludar
+        </a>` : ''}
+    </div>
+  `).join('');
 }
 
 function renderRecent() {
@@ -2032,6 +2101,241 @@ function renderBudget() {
 
   grid.innerHTML = html;
   renderVariables();
+}
+
+// ─── GENERADOR DE CONTRATOS ───────────────────────────────────────────────────
+
+const CONTRATOS_TEXTO = {
+  'Ruta Integral del Artista de Fe': {
+    objeto: 'RUTA INTEGRAL DEL ARTISTA DE FE. AUDIO, VIDEO Y MARKETING',
+    alcance: `En ejecución del objeto contractual EL CONTRATISTA se obliga a realizar las siguientes actividades para {CANCIONES} canción(es):
+
+1. PRODUCCIÓN MUSICAL: Grabación de voces con sesión profesional en estudio con dirección artística. Grabación de instrumentos. Arreglos musicales. Instrumentación real y/o sintética. Masterización. Mezcla. Edición de voces.
+
+2. VIDEOCLIP 4K: Producción audiovisual de alta calidad con equipo profesional. Iluminación y dirección artística. Video musical en 4K.
+
+3. MARKETING Y PUBLICIDAD: Estrategia de contenido para el lanzamiento. Distribución en todas las plataformas digitales. 20,000 reproducciones en YouTube. Pauta digital.
+
+4. COMUNIDAD SKOOL: Acceso a comunidad de más de 100 artistas cristianos activos de Latinoamérica y Estados Unidos. Networking, recursos y acompañamiento del equipo de Creando Sueños Studio.`
+  },
+  'Ruta HIT': {
+    objeto: 'RUTA HIT. PRODUCCIÓN MUSICAL PROFESIONAL Y COMUNIDAD SKOOL',
+    alcance: `En ejecución del objeto contractual EL CONTRATISTA se obliga a realizar las siguientes actividades para {CANCIONES} canción(es):
+
+1. PRODUCCIÓN MUSICAL: Grabación de voces con sesión profesional en estudio con dirección artística. Grabación de instrumentos. Arreglos musicales. Instrumentación real y/o sintética. Masterización. Mezcla. Edición de voces.
+
+2. DISTRIBUCIÓN DIGITAL: Distribución de la canción en todas las plataformas digitales (Spotify, Apple Music, YouTube Music, Deezer, entre otras).
+
+3. COMUNIDAD SKOOL: Acceso a comunidad de más de 100 artistas cristianos activos de Latinoamérica y Estados Unidos. Networking, recursos y acompañamiento del equipo de Creando Sueños Studio.`
+  },
+  'Ruta CTI': {
+    objeto: 'RUTA CTI. PRODUCCIÓN MUSICAL Y SERVICIOS COMPLEMENTARIOS',
+    alcance: `En ejecución del objeto contractual EL CONTRATISTA se obliga a realizar las siguientes actividades para {CANCIONES} canción(es):
+
+1. PRODUCCIÓN MUSICAL: Grabación de voces con sesión profesional en estudio con dirección artística. Arreglos musicales. Instrumentación. Masterización. Mezcla. Edición de voces.
+
+2. DISTRIBUCIÓN DIGITAL: Distribución de la canción en todas las plataformas digitales.
+
+3. ACOMPAÑAMIENTO: Seguimiento y acompañamiento del equipo de Creando Sueños Studio durante la ejecución del contrato.`
+  },
+  'Aceleradora de Artistas': {
+    objeto: 'ACELERADORA DE ARTISTAS CRISTIANOS. PROGRAMA SEMIPERSONALIZADO DE 8 SEMANAS',
+    alcance: `En ejecución del objeto contractual EL CONTRATISTA se obliga a realizar las siguientes actividades:
+
+1. PROGRAMA DE 8 SEMANAS: 8 encuentros virtuales en vivo (quedan grabados). Formación estratégica paso a paso. Herramientas y recursos digitales.
+
+2. MÓDULOS DEL PROGRAMA:
+   - Semana 1: Diagnóstico y visión — evaluación del proyecto y definición de dirección.
+   - Semana 2: Identidad artística y marca personal.
+   - Semana 3: Estrategia de contenido y redes sociales.
+   - Semana 4: Lanzamiento musical profesional.
+   - Semana 5: Monetización y generación de ingresos.
+   - Semana 6: Distribución digital y regalías.
+   - Semana 7: Relaciones públicas y medios cristianos.
+   - Semana 8: Plan de acción a 90 días.
+
+3. RESULTADOS: Al finalizar el programa el artista contará con identidad artística clara, plan de monetización real, estrategia de contenido definida y red de contactos en la industria musical cristiana.
+
+4. CUPOS LIMITADOS: El programa tiene un máximo de 10 participantes por edición para garantizar atención semipersonalizada.`
+  },
+  'Ruta del Impacto de Fe': {
+    objeto: 'RUTA DEL IMPACTO DE FE. PLAN DE DIFUSIÓN Y MARKETING MUSICAL',
+    alcance: `En ejecución del objeto contractual EL CONTRATISTA se obliga a realizar las siguientes actividades:
+
+1. POSICIONAMIENTO EN YOUTUBE: 30,000 reproducciones en YouTube para el videoclip del CONTRATANTE. Posicionamiento con tracción real y orgánica.
+
+2. PROMOCIÓN CON INFLUENCERS: Difusión a través de influencers y creadores de contenido del mundo cristiano en Latinoamérica y Estados Unidos.
+
+3. MEDIOS CRISTIANOS: Publicación y difusión en medios de comunicación del ámbito cristiano.
+
+4. PAUTA DIGITAL: Estrategia de pauta digital para amplificar el alcance de la canción en plataformas digitales.
+
+5. DISTRIBUCIÓN: Distribución de la canción en todas las plataformas digitales (si aplica).`
+  }
+};
+
+function generarContrato(clienteId) {
+  const c = clientes.find(x => x.id === clienteId);
+  if (!c) return;
+
+  // Buscar texto del servicio
+  const servicioKey = Object.keys(CONTRATOS_TEXTO).find(k =>
+    c.servicio && c.servicio.toLowerCase().includes(k.toLowerCase().split(' ')[1])
+  ) || Object.keys(CONTRATOS_TEXTO)[0];
+
+  const textoContrato = CONTRATOS_TEXTO[c.servicio] || CONTRATOS_TEXTO[servicioKey];
+  if (!textoContrato) { showToast('Servicio sin plantilla de contrato.', 'error'); return; }
+
+  const hoy = new Date();
+  const diaHoy = hoy.getDate();
+  const mesHoy = hoy.toLocaleDateString('es-CO', {month:'long'});
+  const anioHoy = hoy.getFullYear();
+
+  const fechaInicio = c.fechaInicio ? new Date(c.fechaInicio).toLocaleDateString('es-CO', {day:'numeric',month:'long',year:'numeric'}) : '_______________';
+  const fechaFin = c.fechaInicio && c.canciones ? (() => {
+    const fi = new Date(c.fechaInicio);
+    fi.setMonth(fi.getMonth() + (c.canciones * 3));
+    return fi.toLocaleDateString('es-CO', {day:'numeric',month:'long',year:'numeric'});
+  })() : '_______________';
+
+  const numContrato = `2026-${String(clientes.indexOf(c) + 1).padStart(4,'0')}`;
+  const totalFmt = new Intl.NumberFormat('es-CO').format(c.total);
+  const cuotaFmt = new Intl.NumberFormat('es-CO').format(c.cuota);
+  const monedaSimbolo = c.moneda === 'USD' ? 'USD $' : '$';
+  const mesesContrato = c.cuota > 0 ? Math.ceil(c.total / c.cuota) : '___';
+
+  const alcanceTexto = textoContrato.alcance.replace('{CANCIONES}', c.canciones || 1);
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11pt; margin: 2.5cm; color: #000; line-height: 1.5; }
+  h1 { text-align: center; font-size: 12pt; font-weight: bold; margin-bottom: 4px; }
+  .subtitulo { text-align: center; font-size: 11pt; margin-bottom: 2px; }
+  .pagina { text-align: left; font-size: 11pt; margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+  td { border: 1px solid #000; padding: 6px 10px; font-size: 10.5pt; vertical-align: top; }
+  td:first-child { font-weight: bold; width: 35%; }
+  .clausula { margin-bottom: 18px; text-align: justify; }
+  .clausula strong { font-weight: bold; }
+  .firmas { margin-top: 60px; display: flex; justify-content: space-between; }
+  .firma-bloque { width: 45%; }
+  .firma-linea { border-top: 1px solid #000; margin-top: 50px; padding-top: 4px; font-size: 10pt; }
+  .logo { text-align: center; margin-bottom: 10px; font-size: 18pt; font-weight: bold; font-style: italic; color: #2c5f2d; }
+  @media print { body { margin: 1.5cm; } }
+</style>
+</head>
+<body>
+<div class="logo">Creando Sueños<br><span style="font-size:10pt;font-style:normal;color:#666;">STUDIO</span></div>
+
+<h1>CONTRATO DE PRESTACIÓN DE SERVICIOS &nbsp;&nbsp; Código: C-PS-PNN</h1>
+<div class="subtitulo"><strong>Fecha de Aplicación:</strong> ${diaHoy} de ${mesHoy} de ${anioHoy}</div>
+<div class="pagina">Página 1 de 4 &nbsp;&nbsp; <strong>Versión:</strong> 02</div>
+
+<table>
+  <tr><td>CONTRATO No.</td><td>${numContrato}</td></tr>
+  <tr><td>CONTRATANTE:</td><td>${c.nombre}</td></tr>
+  <tr><td>NIT o C.C</td><td>___________________________</td></tr>
+  <tr><td>CONTRATISTA:</td><td>CREANDO SUEÑOS STUDIO</td></tr>
+  <tr><td>NIT</td><td>901689412</td></tr>
+  <tr><td>REPRESENTANTE LEGAL</td><td>JUAN PABLO MONDRAGÓN</td></tr>
+  <tr><td>CÉDULA DE CIUDADANÍA</td><td>1.144.103.167 expedida en Cali (V)</td></tr>
+  <tr><td>OBJETO:</td><td>${textoContrato.objeto}</td></tr>
+  <tr><td>VALOR HONORARIOS:</td><td>${monedaSimbolo}${totalFmt} ${c.moneda || 'COP'}</td></tr>
+  <tr><td>DURACIÓN:</td><td>${mesesContrato} meses</td></tr>
+  <tr><td>FECHA DE INICIO:</td><td>${fechaInicio}</td></tr>
+  <tr><td>FECHA DE TERMINACIÓN:</td><td>${fechaFin}</td></tr>
+  <tr><td>SUPERVISOR:</td><td>VALENTINA MUÑOZ</td></tr>
+  <tr><td>CÉDULA DE CIUDADANÍA</td><td>1.112.488.846 expedida en Jamundi (V)</td></tr>
+</table>
+
+<div class="clausula">
+Entre los suscritos a saber, <strong>${c.nombre}</strong> identificado con No. CC ___________________________ persona quien para efectos del presente contrato se denominará <strong>EL CONTRATANTE</strong> por una parte y por otra, <strong>JUAN PABLO MONDRAGÓN</strong>, identificado con la cédula de ciudadanía No. 1.144.103.167 expedida en Cali (V), representante legal de CREANDO SUEÑOS STUDIO CON NIT 901689412, quien para los efectos del presente contrato se denominará <strong>EL CONTRATISTA</strong>, hemos acordado celebrar el presente Contrato de Prestación de Servicios el cual se regirá por las siguientes cláusulas:
+</div>
+
+<div class="clausula">
+<strong>PRIMERA.– OBJETO: EL CONTRATISTA</strong> se obliga a prestar sus servicios profesionales de producción musical, Producción audiovisual, Distribución en plataformas digitales y Pack de Marketing, de manera independiente, sin que exista subordinación laboral, utilizando sus propios medios, para realizar actividades que permitan el cumplimiento del objeto del presente contrato.
+</div>
+
+<div class="clausula">
+<strong>SEGUNDA. -ALCANCE DEL OBJETO:</strong> ${alcanceTexto.split('\n').join('<br>')}
+</div>
+
+<div class="clausula">
+<strong>TERCERA. - DURACIÓN:</strong> La duración del presente contrato será por el término de <strong>${mesesContrato}</strong> meses, e iniciará a partir del día <strong>${fechaInicio}</strong>, hasta el día <strong>${fechaFin}</strong>. <strong>PARÁGRAFO</strong>: Cualquier modificación o adición debe hacerse antes del vencimiento del contrato y se deben añadir los soportes correspondientes.
+</div>
+
+<div class="clausula">
+<strong>CUARTA. - VALOR DEL CONTRATO Y FORMA DE PAGO:</strong> El valor total del contrato que se reconocerá a <strong>EL CONTRATISTA</strong> será por la suma de <strong>${monedaSimbolo}${totalFmt} ${c.moneda || 'COP'}</strong> los cuales se cancelarán en <strong>${mesesContrato}</strong> cuotas de <strong>${monedaSimbolo}${cuotaFmt}</strong> los días <strong>${c.diaPago || '___'}</strong> de cada mes.
+</div>
+
+<div class="clausula">
+<strong>QUINTA.- OBLIGACIONES DE EL CONTRATISTA: EL CONTRATISTA</strong> se compromete a: <strong>1)</strong> Obrar con máxima diligencia la consecución del objeto <strong>2)</strong> Cumplir con los plazos establecidos.; <strong>3)</strong> Regirse a los procedimientos y formatos establecidos por el sistema de calidad establecidos internamente en <strong>CREANDO SUEÑOS STUDIO 5)</strong> Informar Al contratante con la debida motivación y anticipación de cualquier contratiempo o dificultad que le impida el cumplimiento del contrato <strong>6)</strong> Conocer y cumplir las políticas de seguridad informática de la información establecidos por las partes, en consecuencia, <strong>EL CONTRATISTA</strong> no podrá difundir, transmitir o revelar cualquier información a la que tenga acceso del <strong>CONTRATANTE</strong> en ejecución del presente contrato, ni a utilizar tal información en interés propio o de terceras personas. <strong>7)</strong> Las demás obligaciones que surjan de la naturaleza y obligaciones propias del presente contrato.
+</div>
+
+<div class="clausula">
+<strong>SEXTA - TERMINACIÓN:</strong> Las partes podrán dar por terminado el presente contrato por: <strong>1)</strong> Mutuo acuerdo sin que haya lugar al pago de indemnización; <strong>2)</strong> Por incumplimiento de cualquiera de las obligaciones del contrato; <strong>3)</strong> La mora por parte del <strong>CONTRATANTE</strong> en el pago del precio pactado en este contrato; <strong>4)</strong> Por situaciones que impidan cumplir el contrato, como son la fuerza mayor o el caso fortuito; y las demás que establezca la ley.
+</div>
+
+<div class="clausula">
+<strong>SÉPTIMA - SUSPENSIÓN TEMPORAL DEL CONTRATO:</strong> El plazo de ejecución del presente contrato podrá suspenderse excepcionalmente de manera temporal en las siguientes circunstancias: <strong>1)</strong> Por mutuo acuerdo de las partes. <strong>2)</strong> Por solicitud del contratista por causa debidamente justificada y aceptada por <strong>EL CONTRATANTE 3)</strong> Por incapacidad médica que impida la prestación del servicio debidamente soportada. <strong>4)</strong> Por circunstancias de fuerza mayor o caso fortuito.
+</div>
+
+<div class="clausula">
+<strong>OCTAVA- PROPIEDAD INTELECTUAL Y TITULARIDAD DE DERECHOS:</strong> Las partes acuerdan que el presente contrato corresponde exclusivamente a una prestación de servicios de producción musical, audiovisual y apoyo en marketing. En consecuencia, el CONTRATISTA no adquiere ni reclamará ningún derecho de propiedad intelectual sobre la obra musical, su composición, melodía, armonía, letra, producción fonográfica o audiovisual derivada del presente proyecto. La totalidad de los derechos patrimoniales y de explotación sobre la obra y los materiales resultantes pertenecerán única y exclusivamente al ARTISTA, quien será titular del cien por ciento (100%) de dichos derechos.
+</div>
+
+<div class="clausula">
+<strong>NOVENA - PERFECCIONAMIENTO:</strong> El presente contrato se entiende perfeccionado con la firma de las partes.
+</div>
+
+<div class="clausula">
+Para constancia se firma en dos ejemplares del mismo tenor, en Santiago de Cali a los <strong>${diaHoy}</strong> días del mes de <strong>${mesHoy} de ${anioHoy}</strong>
+</div>
+
+<div class="firmas">
+  <div class="firma-bloque">
+    <strong>EL CONTRATANTE</strong>
+    <div class="firma-linea">
+      ${c.nombre}<br>
+      C.C. ___________________________
+    </div>
+  </div>
+  <div class="firma-bloque">
+    <strong>EL CONTRATISTA</strong>
+    <div class="firma-linea">
+      JUAN PABLO MONDRAGÓN<br>
+      C.C. No. 1.144.103.167 de Cali(V)
+    </div>
+  </div>
+</div>
+
+</body>
+</html>`;
+
+  // Abrir en ventana nueva para imprimir/guardar
+  const ventana = window.open('', '_blank');
+  ventana.document.write(html);
+  ventana.document.close();
+
+  // Modal de opciones
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:14px;padding:28px;max-width:420px;width:100%;text-align:center;">
+      <div style="font-size:2rem;margin-bottom:12px;">📄</div>
+      <div style="font-family:'Space Grotesk';font-size:1.1rem;font-weight:700;margin-bottom:8px;">Contrato generado</div>
+      <div style="font-size:0.85rem;color:var(--muted);margin-bottom:20px;">Se abrió en una nueva ventana. Puedes editarlo, imprimirlo o guardarlo como PDF.</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button class="btn-primary" onclick="ventana.print();this.closest('div[style*=fixed]').remove()">🖨️ Imprimir / Guardar como PDF</button>
+        <button class="refresh-btn" onclick="this.closest('div[style*=fixed]').remove()" style="text-align:center;">Cerrar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  showToast(`✓ Contrato de ${c.nombre} generado`);
 }
 
 // ─── TASA DE CAMBIO ──────────────────────────────────────────────────────────
