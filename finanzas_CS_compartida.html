@@ -238,6 +238,7 @@
     <button onclick="showSection('movimientos')">Movimientos</button>
     <button onclick="showSection('presupuesto')">Gastos Fijos</button>
     <button onclick="showSection('clientes')">Artistas</button>
+    <button onclick="showSection('reportes')">📊 Reportes</button>
   </nav>
   <div class="header-right">
     <div class="user-badge">
@@ -915,8 +916,32 @@
             </div>
           </div>
 
-          <!-- Historial de pagos -->
-          <div>
+          <!-- Notas y seguimiento -->
+          <div style="margin-bottom:24px;">
+            <div style="font-size:0.8rem;font-weight:600;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px;">📝 Notas de seguimiento</div>
+            <div id="notasList" style="margin-bottom:12px;"></div>
+            <div style="display:flex;gap:10px;">
+              <input type="text" id="notaNueva" placeholder="Ej: Llamé hoy, dijo que paga el viernes..." style="flex:1;">
+              <button class="btn-primary" style="width:auto;padding:10px 16px;" onclick="agregarNota()">+ Agregar</button>
+            </div>
+          </div>
+
+          <!-- Estado de producción -->
+          <div style="margin-bottom:24px;">
+            <div style="font-size:0.8rem;font-weight:600;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px;">🎵 Estado de producción</div>
+            <div id="produccionInfo"></div>
+            <div style="display:flex;gap:10px;margin-top:12px;align-items:flex-end;flex-wrap:wrap;">
+              <div style="flex:1;min-width:120px;">
+                <label>Canciones entregadas</label>
+                <input type="number" id="cancionesEntregadas" placeholder="0" min="0" oninput="actualizarProduccion()">
+              </div>
+              <div style="flex:2;min-width:200px;">
+                <label>Nota de producción</label>
+                <input type="text" id="notaProduccion" placeholder="Estado actual de la producción...">
+              </div>
+              <button class="refresh-btn" onclick="guardarProduccion()" style="padding:11px 16px;">Guardar</button>
+            </div>
+          </div>
             <div style="font-size:0.8rem;font-weight:600;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px;">Historial de pagos</div>
             <div id="fichaPagos"></div>
           </div>
@@ -928,6 +953,54 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- REPORTES -->
+  <div class="section" id="reportes">
+    <div class="section-header">
+      <h2>📊 Reportes</h2>
+      <select id="reportesMes" onchange="renderReportes()" style="width:auto;background:var(--surface);border:1px solid var(--border);padding:8px 14px;border-radius:9px;"></select>
+    </div>
+
+    <!-- META MENSUAL -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-title">🎯 META MENSUAL DE FACTURACIÓN</div>
+      <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px;">
+        <div style="flex:1;min-width:200px;">
+          <label>Meta del mes (COP)</label>
+          <input type="text" id="metaMensual" placeholder="0" oninput="fmtInput(this);saveMetaMensual()" inputmode="numeric" style="margin-top:6px;">
+        </div>
+        <div id="metaStatus" style="flex:2;min-width:200px;"></div>
+      </div>
+      <div class="progress-bar" style="height:12px;">
+        <div id="metaBar" class="progress-fill" style="width:0%;background:var(--accent2);border-radius:99px;transition:width 0.5s;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--muted);margin-top:6px;">
+        <span id="metaPct">0% de la meta</span>
+        <span id="metaFalta"></span>
+      </div>
+    </div>
+
+    <!-- REPORTE DE CIERRE MENSUAL -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-title">📅 CIERRE DEL MES</div>
+      <div id="reporteCierre"></div>
+    </div>
+
+    <!-- ALERTA DE MORA PARA WHATSAPP -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-title">📱 RESUMEN DE MORA PARA WHATSAPP</div>
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:12px;">Copia este mensaje y mándalo al equipo o úsalo para hacer cobros.</div>
+      <div id="moraWhatsapp" style="background:var(--surface2);border-radius:10px;padding:16px;font-size:0.85rem;line-height:1.7;white-space:pre-wrap;font-family:monospace;color:var(--text);"></div>
+      <button class="btn-primary" style="margin-top:12px;width:auto;padding:10px 20px;" onclick="copiarMora()">📋 Copiar mensaje</button>
+    </div>
+
+    <!-- PROYECCIÓN SI TODOS PAGAN -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-title">💰 PROYECCIÓN SI TODOS EN MORA PAGAN</div>
+      <div id="proyeccion"></div>
+    </div>
+
   </div>
 
 </main>
@@ -971,7 +1044,7 @@ function getMonths() {
 
 function populateMonthSelectors() {
   const months = getMonths();
-  ['dashMonth','budgetMonth'].forEach(id => {
+  ['dashMonth','budgetMonth','reportesMes'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     const cur = el.value || currentMonth();
@@ -1090,13 +1163,14 @@ function showSection(id) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   document.querySelectorAll('nav button').forEach((b,i) => {
-    b.classList.toggle('active', ['dashboard','registro','movimientos','presupuesto','clientes'][i] === id);
+    b.classList.toggle('active', ['dashboard','registro','movimientos','presupuesto','clientes','reportes'][i] === id);
   });
   populateMonthSelectors();
   if (id === 'dashboard') renderDashboard();
   if (id === 'movimientos') renderTable();
   if (id === 'presupuesto') renderBudget();
   if (id === 'clientes') renderClientes();
+  if (id === 'reportes') renderReportes();
 }
 
 // ─── TYPE TOGGLE ─────────────────────────────────────────────────────────────
@@ -2000,6 +2074,224 @@ function convertirACOP(amount, currency) {
   return amount * (tasaUSD || 4200);
 }
 
+// ─── REPORTES ─────────────────────────────────────────────────────────────────
+let metasMensuales = JSON.parse(localStorage.getItem('cs_metas') || '{}');
+
+function saveMetaMensual() {
+  const mes = document.getElementById('reportesMes')?.value || currentMonth();
+  const val = parseAmt('metaMensual');
+  metasMensuales[mes] = val;
+  localStorage.setItem('cs_metas', JSON.stringify(metasMensuales));
+  renderMetaBar(mes);
+}
+
+function renderMetaBar(mes) {
+  const meta = metasMensuales[mes] || 0;
+  const incomeCOP = transactions.filter(t => t.type==='income' && (t.currency||'COP')==='COP' && t.date && t.date.startsWith(mes)).reduce((s,t)=>s+t.amount,0);
+  const incomeUSD = transactions.filter(t => t.type==='income' && t.currency==='USD' && t.date && t.date.startsWith(mes)).reduce((s,t)=>s+(t.amountCOP||convertirACOP(t.amount,'USD')),0);
+  const totalIncome = incomeCOP + incomeUSD;
+  const pct = meta > 0 ? Math.min((totalIncome/meta)*100, 100) : 0;
+  const color = pct >= 100 ? 'var(--green)' : pct >= 70 ? 'var(--accent2)' : pct >= 40 ? 'var(--yellow)' : 'var(--red)';
+
+  const bar = document.getElementById('metaBar');
+  const pctEl = document.getElementById('metaPct');
+  const faltaEl = document.getElementById('metaFalta');
+  const statusEl = document.getElementById('metaStatus');
+
+  if (bar) { bar.style.width = pct+'%'; bar.style.background = color; }
+  if (pctEl) pctEl.textContent = pct.toFixed(1)+'% de la meta';
+  if (faltaEl) {
+    if (pct >= 100) faltaEl.textContent = '✓ Meta cumplida!';
+    else if (meta > 0) faltaEl.textContent = `Falta: ${fmt(meta - totalIncome)}`;
+  }
+  if (statusEl) {
+    statusEl.innerHTML = `
+      <div style="display:flex;gap:20px;flex-wrap:wrap;">
+        <div><div style="font-size:0.72rem;color:var(--muted);">Facturado</div><div style="font-family:'Space Grotesk';font-size:1.3rem;font-weight:700;color:var(--green);">${fmt(totalIncome)}</div></div>
+        <div><div style="font-size:0.72rem;color:var(--muted);">Meta</div><div style="font-family:'Space Grotesk';font-size:1.3rem;font-weight:700;color:var(--accent2);">${meta > 0 ? fmt(meta) : '—'}</div></div>
+        ${pct >= 100 ? '<div style="font-size:1.5rem;align-self:center;">🎉</div>' : ''}
+      </div>
+    `;
+  }
+}
+
+function renderReportes() {
+  const mes = document.getElementById('reportesMes')?.value || currentMonth();
+
+  // Poblar selector de meses
+  const meses = getMonths();
+  const sel = document.getElementById('reportesMes');
+  if (sel) {
+    const cur = sel.value || currentMonth();
+    sel.innerHTML = meses.map(m => `<option value="${m}" ${m===cur?'selected':''}>${formatMonthLabel(m)}</option>`).join('');
+  }
+
+  // Meta mensual
+  const metaInput = document.getElementById('metaMensual');
+  if (metaInput && metasMensuales[mes]) {
+    metaInput.value = new Intl.NumberFormat('es-CO').format(metasMensuales[mes]);
+  } else if (metaInput) {
+    metaInput.value = '';
+  }
+  renderMetaBar(mes);
+
+  // Reporte de cierre
+  renderCierre(mes);
+
+  // Mora WhatsApp
+  renderMoraWhatsapp();
+
+  // Proyección
+  renderProyeccion();
+}
+
+function renderCierre(mes) {
+  const el = document.getElementById('reporteCierre');
+  if (!el) return;
+
+  const txMes = transactions.filter(t => t.date && t.date.startsWith(mes));
+  const incomeCOP = txMes.filter(t => t.type==='income' && (t.currency||'COP')==='COP').reduce((s,t)=>s+t.amount,0);
+  const incomeUSD = txMes.filter(t => t.type==='income' && t.currency==='USD').reduce((s,t)=>s+(t.amountCOP||convertirACOP(t.amount,'USD')),0);
+  const totalIncome = incomeCOP + incomeUSD;
+  const totalExpense = txMes.filter(t => t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const ganancia = totalIncome - totalExpense;
+
+  // Mes anterior para comparar
+  const [y, m] = mes.split('-').map(Number);
+  const prevDate = new Date(y, m-2, 1);
+  const prevMes = `${prevDate.getFullYear()}-${String(prevDate.getMonth()+1).padStart(2,'0')}`;
+  const txPrev = transactions.filter(t => t.date && t.date.startsWith(prevMes));
+  const prevIncome = txPrev.filter(t => t.type==='income').reduce((s,t)=>s+(t.amountCOP||t.amount),0);
+  const prevExpense = txPrev.filter(t => t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const prevGanancia = prevIncome - prevExpense;
+
+  const diffIncome = prevIncome > 0 ? ((totalIncome - prevIncome)/prevIncome*100).toFixed(1) : null;
+  const diffGanancia = prevGanancia !== 0 ? ((ganancia - prevGanancia)/Math.abs(prevGanancia)*100).toFixed(1) : null;
+
+  // Top categorías de ingreso
+  const catMap = {};
+  txMes.filter(t => t.type==='income').forEach(t => { catMap[t.cat] = (catMap[t.cat]||0) + (t.amountCOP||t.amount); });
+  const topCats = Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+  // Artistas que pagaron este mes
+  const artistasPagaron = [...new Set(txMes.filter(t=>t.type==='income').map(t=>t.desc))].length;
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
+      <div class="kpi" style="padding:16px;">
+        <div class="kpi-label">Total facturado</div>
+        <div class="kpi-value green" style="font-size:1.2rem;">${fmt(totalIncome)}</div>
+        ${diffIncome !== null ? `<div style="font-size:0.72rem;margin-top:4px;color:${parseFloat(diffIncome)>=0?'var(--green)':'var(--red)'};">${parseFloat(diffIncome)>=0?'↑':'↓'} ${Math.abs(diffIncome)}% vs mes anterior</div>` : ''}
+      </div>
+      <div class="kpi" style="padding:16px;">
+        <div class="kpi-label">Total gastos</div>
+        <div class="kpi-value red" style="font-size:1.2rem;">${fmt(totalExpense)}</div>
+      </div>
+      <div class="kpi" style="padding:16px;">
+        <div class="kpi-label">Ganancia neta</div>
+        <div class="kpi-value ${ganancia>=0?'purple':'red'}" style="font-size:1.2rem;">${fmt(ganancia)}</div>
+        ${diffGanancia !== null ? `<div style="font-size:0.72rem;margin-top:4px;color:${parseFloat(diffGanancia)>=0?'var(--green)':'var(--red)'};">${parseFloat(diffGanancia)>=0?'↑':'↓'} ${Math.abs(diffGanancia)}% vs mes anterior</div>` : ''}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <div style="font-size:0.75rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Top servicios del mes</div>
+        ${topCats.length ? topCats.map(([cat,val]) => `
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
+            <span>${cat}</span><span style="font-weight:600;color:var(--green);">${fmt(val)}</span>
+          </div>`).join('') : '<div style="color:var(--muted);font-size:0.85rem;">Sin datos</div>'}
+      </div>
+      <div>
+        <div style="font-size:0.75rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Resumen</div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:0.85rem;">
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);">Artistas que pagaron</span><span style="font-weight:600;">${artistasPagaron}</span></div>
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);">Transacciones totales</span><span style="font-weight:600;">${txMes.length}</span></div>
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);">Margen de ganancia</span><span style="font-weight:600;color:${ganancia>=0?'var(--green)':'var(--red)'};">${totalIncome > 0 ? (ganancia/totalIncome*100).toFixed(1)+'%' : '—'}</span></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderMoraWhatsapp() {
+  const el = document.getElementById('moraWhatsapp');
+  if (!el) return;
+
+  const enMora = clientes.filter(c => isMora(c));
+  if (!enMora.length) {
+    el.textContent = '✅ No hay artistas en mora en este momento.';
+    return;
+  }
+
+  const hoy = new Date().toLocaleDateString('es-CO', {day:'numeric', month:'long', year:'numeric'});
+  let msg = `📊 *REPORTE DE MORA - CREANDO SUEÑOS STUDIO*\n`;
+  msg += `📅 ${hoy}\n\n`;
+  msg += `⚠️ *Artistas con cuotas vencidas:*\n\n`;
+
+  enMora.forEach((c, i) => {
+    const mora = getCuotaVencida(c);
+    msg += `${i+1}. *${c.nombre}*\n`;
+    msg += `   💰 Mora: ${fmt(mora, c.moneda)}\n`;
+    msg += `   📌 Día de pago: ${c.diaPago} de cada mes\n`;
+    if (c.whatsapp) msg += `   📱 ${c.whatsapp}\n`;
+    msg += '\n';
+  });
+
+  const totalCOP = enMora.filter(c=>(c.moneda||'COP')==='COP').reduce((s,c)=>s+getCuotaVencida(c),0);
+  const totalUSD = enMora.filter(c=>c.moneda==='USD').reduce((s,c)=>s+getCuotaVencida(c),0);
+  msg += `─────────────────\n`;
+  msg += `*TOTAL EN MORA:*\n`;
+  if (totalCOP > 0) msg += `🇨🇴 ${fmt(totalCOP)}\n`;
+  if (totalUSD > 0) msg += `🇺🇸 ${fmt(totalUSD,'USD')}\n`;
+
+  el.textContent = msg;
+}
+
+function copiarMora() {
+  const el = document.getElementById('moraWhatsapp');
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent).then(() => {
+    showToast('✓ Mensaje copiado al portapapeles');
+  }).catch(() => {
+    showToast('Selecciona el texto manualmente y copia con Ctrl+C', 'error');
+  });
+}
+
+function renderProyeccion() {
+  const el = document.getElementById('proyeccion');
+  if (!el) return;
+
+  const enMora = clientes.filter(c => isMora(c));
+  const totalCOP = enMora.filter(c=>(c.moneda||'COP')==='COP').reduce((s,c)=>s+getCuotaVencida(c),0);
+  const totalUSD = enMora.filter(c=>c.moneda==='USD').reduce((s,c)=>s+getCuotaVencida(c),0);
+  const totalUSDenCOP = convertirACOP(totalUSD, 'USD');
+  const totalProyectado = totalCOP + totalUSDenCOP;
+
+  const mes = document.getElementById('reportesMes')?.value || currentMonth();
+  const incomeMes = transactions.filter(t=>t.type==='income' && t.date && t.date.startsWith(mes)).reduce((s,t)=>s+(t.amountCOP||t.amount),0);
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+      <div class="kpi" style="padding:16px;">
+        <div class="kpi-label">Si todos en mora pagan (COP)</div>
+        <div class="kpi-value green" style="font-size:1.1rem;">${fmt(totalCOP)}</div>
+      </div>
+      <div class="kpi" style="padding:16px;">
+        <div class="kpi-label">Si todos en mora pagan (USD)</div>
+        <div class="kpi-value green" style="font-size:1.1rem;">${fmt(totalUSD,'USD')}</div>
+      </div>
+      <div class="kpi" style="padding:16px;">
+        <div class="kpi-label">Total proyectado en COP</div>
+        <div class="kpi-value purple" style="font-size:1.1rem;">${fmt(incomeMes + totalProyectado)}</div>
+        <div class="kpi-sub">Mes actual + mora cobrada</div>
+      </div>
+    </div>
+    <div style="margin-top:16px;padding:14px;background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);border-radius:10px;font-size:0.85rem;">
+      💡 Si cobras toda la mora pendiente, tu facturación del mes pasaría de <strong>${fmt(incomeMes)}</strong> a <strong>${fmt(incomeMes + totalProyectado)}</strong>
+    </div>
+  `;
+}
+
 // ─── CLIENTES ─────────────────────────────────────────────────────────────────
 let clientes = JSON.parse(localStorage.getItem('cs_clientes') || '[]');
 let currentClienteId = null;
@@ -2385,6 +2677,16 @@ function openFicha(id) {
   document.getElementById('fichaBar').style.background = pct >= 100 ? 'var(--green)' : isMora(c) ? 'var(--red)' : 'var(--accent2)';
   document.getElementById('pagoFecha').value = new Date().toISOString().slice(0,10);
   document.getElementById('abonoFecha').value = new Date().toISOString().slice(0,10);
+
+  // Cargar notas
+  renderNotasList();
+
+  // Cargar producción
+  const cancionesEl = document.getElementById('cancionesEntregadas');
+  const notaProdEl = document.getElementById('notaProduccion');
+  if (cancionesEl) cancionesEl.value = c.cancionesEntregadas || 0;
+  if (notaProdEl) notaProdEl.value = c.notaProduccion || '';
+  actualizarProduccion();
 
   document.getElementById('fichaStats').innerHTML = `
     <div class="kpi" style="padding:16px;">
@@ -2810,6 +3112,85 @@ function generarReciboMovimiento(txId) {
   document.body.appendChild(modal);
   window._reciboHTML = recibo;
   setTimeout(() => { document.getElementById('reciboFrame').srcdoc = recibo; }, 100);
+}
+
+function agregarNota() {
+  const texto = document.getElementById('notaNueva').value.trim();
+  if (!texto) return;
+  const c = clientes.find(x => x.id === currentClienteId);
+  if (!c) return;
+  c.notasSeguimiento = c.notasSeguimiento || [];
+  c.notasSeguimiento.unshift({
+    texto,
+    fecha: new Date().toLocaleDateString('es-CO'),
+    hora: new Date().toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'}),
+    autor: getWho()
+  });
+  saveClientes();
+  document.getElementById('notaNueva').value = '';
+  renderNotasList();
+  showToast('✓ Nota agregada');
+}
+
+function renderNotasList() {
+  const c = clientes.find(x => x.id === currentClienteId);
+  const el = document.getElementById('notasList');
+  if (!el || !c) return;
+  const notas = c.notasSeguimiento || [];
+  if (!notas.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:0.82rem;padding:8px 0;">Sin notas aún.</div>';
+    return;
+  }
+  el.innerHTML = notas.slice(0,5).map((n,i) => `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px;">
+      <div>
+        <div style="font-size:0.85rem;">${n.texto}</div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:3px;">${n.fecha} ${n.hora} · ${n.autor}</div>
+      </div>
+      <button class="delete-btn" onclick="eliminarNota(${i})">✕</button>
+    </div>
+  `).join('');
+  if (notas.length > 5) {
+    el.innerHTML += `<div style="font-size:0.75rem;color:var(--muted);text-align:center;padding:6px;">+${notas.length-5} notas más</div>`;
+  }
+}
+
+function eliminarNota(idx) {
+  const c = clientes.find(x => x.id === currentClienteId);
+  if (!c) return;
+  c.notasSeguimiento.splice(idx, 1);
+  saveClientes();
+  renderNotasList();
+}
+
+function actualizarProduccion() {
+  const c = clientes.find(x => x.id === currentClienteId);
+  const el = document.getElementById('produccionInfo');
+  if (!c || !el) return;
+  const entregadas = parseInt(document.getElementById('cancionesEntregadas').value) || c.cancionesEntregadas || 0;
+  const total = c.canciones || 0;
+  const pct = total > 0 ? Math.min((entregadas/total)*100,100) : 0;
+  const color = pct >= 100 ? 'var(--green)' : pct >= 50 ? 'var(--accent2)' : 'var(--yellow)';
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:6px;">
+      <span style="color:var(--muted);">Canciones entregadas</span>
+      <span style="font-weight:600;color:${color};">${entregadas} / ${total}</span>
+    </div>
+    <div class="progress-bar" style="height:8px;">
+      <div class="progress-fill" style="width:${pct}%;background:${color};"></div>
+    </div>
+    ${c.notaProduccion ? `<div style="font-size:0.78rem;color:var(--muted);margin-top:8px;">📝 ${c.notaProduccion}</div>` : ''}
+  `;
+}
+
+function guardarProduccion() {
+  const c = clientes.find(x => x.id === currentClienteId);
+  if (!c) return;
+  c.cancionesEntregadas = parseInt(document.getElementById('cancionesEntregadas').value) || 0;
+  c.notaProduccion = document.getElementById('notaProduccion').value.trim();
+  saveClientes();
+  actualizarProduccion();
+  showToast('✓ Producción actualizada');
 }
 
 function verReciboHistorial(clienteId, pagoId) {
