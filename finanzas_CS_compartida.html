@@ -2334,27 +2334,36 @@ Para constancia se firma en dos ejemplares del mismo tenor, en Santiago de Cali 
 </body>
 </html>`;
 
-  // Abrir en ventana nueva para imprimir/guardar
-  const ventana = window.open('', '_blank');
-  ventana.document.write(html);
-  ventana.document.close();
-
-  // Modal de opciones
+  // Mostrar modal con iframe en vez de ventana emergente
+  const modalId = 'contratoModal_' + Date.now();
   const modal = document.createElement('div');
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.id = modalId;
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;';
   modal.innerHTML = `
-    <div style="background:var(--surface);border-radius:14px;padding:28px;max-width:420px;width:100%;text-align:center;">
-      <div style="font-size:2rem;margin-bottom:12px;">📄</div>
-      <div style="font-family:'Space Grotesk';font-size:1.1rem;font-weight:700;margin-bottom:8px;">Contrato generado</div>
-      <div style="font-size:0.85rem;color:var(--muted);margin-bottom:20px;">Se abrió en una nueva ventana. Puedes editarlo, imprimirlo o guardarlo como PDF.</div>
-      <div style="display:flex;flex-direction:column;gap:10px;">
-        <button class="btn-primary" onclick="ventana.print();this.closest('div[style*=fixed]').remove()">🖨️ Guardar como PDF / Imprimir</button>
-        <div style="font-size:0.78rem;color:var(--muted);text-align:center;">En el diálogo que aparece, selecciona <strong>"Guardar como PDF"</strong> como destino</div>
-        <button class="refresh-btn" onclick="this.closest('div[style*=fixed]').remove()" style="text-align:center;">Cerrar</button>
+    <div style="background:#fff;border-radius:12px;width:100%;max-width:700px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:#1a1a2e;border-radius:12px 12px 0 0;">
+        <span style="font-family:'Space Grotesk';font-weight:700;color:#fff;font-size:0.95rem;">📄 Contrato — ${c.nombre}</span>
+        <div style="display:flex;gap:10px;">
+          <button id="btnImprimirContrato" style="background:#0891b2;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:0.82rem;font-weight:700;cursor:pointer;">🖨️ Guardar como PDF</button>
+          <button onclick="document.getElementById('${modalId}').remove()" style="background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;">✕ Cerrar</button>
+        </div>
       </div>
+      <iframe id="contratoIframe" style="flex:1;border:none;width:100%;min-height:600px;"></iframe>
     </div>
   `;
   document.body.appendChild(modal);
+
+  // Cargar contrato en iframe
+  const iframe = document.getElementById('contratoIframe');
+  iframe.onload = function() {
+    // Botón de imprimir
+    document.getElementById('btnImprimirContrato').onclick = function() {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    };
+  };
+  iframe.srcdoc = html;
+
   showToast(`✓ Contrato de ${c.nombre} generado`);
 }
 
