@@ -2826,22 +2826,10 @@ function getSaldoPendiente(cliente) {
   return Math.max(cliente.total - getTotalPagado(cliente), 0);
 }
 
-function getPagadoEnMes(cliente, mes, anio) {
-  return (cliente.pagos || [])
-    .filter(p => {
-      if (p.tipo === 'capital') return false;
-      const fp = new Date(p.fecha);
-      return fp.getMonth() === mes && fp.getFullYear() === anio;
-    })
-    .reduce((s, p) => s + p.monto, 0);
-}
-
-function getCuotaVencida(cliente) {
-  if (!isMora(cliente)) return 0;
-  if (!cliente.cuota || !cliente.diaPago) return 0;
-
+function getMesesVencidos(cliente) {
+  if (!cliente.diaPago) return 0;
   const hoy = new Date();
-  let totalVencido = 0;
+  let meses = 0;
 
   for (let i = 0; i < 12; i++) {
     const fecha = new Date(hoy.getFullYear(), hoy.getMonth() - i, cliente.diaPago);
@@ -2852,17 +2840,36 @@ function getCuotaVencida(cliente) {
       if (fechaStr < cliente.mesInicioCobro) break;
     }
 
-    const pagadoEseMes = getPagadoEnMes(cliente, fecha.getMonth(), fecha.getFullYear());
-    const faltante = Math.max((cliente.cuota || 0) - pagadoEseMes, 0);
-
-    if (faltante > 0) {
-      totalVencido += faltante;
-    } else {
-      break;
-    }
+    meses++;
   }
 
-  return totalVencido;
+  return meses;
+}
+
+function getTotalPagadoCuotas(cliente) {
+  // Suma todos los pagos tipo "cuota" sin importar la fecha en que se registraron,
+  // así un pago tardío o parcial (ej. $50 pagados en julio para la cuota vencida
+  // de junio) sí se descuenta de la mora, en vez de exigir que caiga en el mismo
+  // mes calendario de la cuota que cubre.
+  return (cliente.pagos || [])
+    .filter(p => p.tipo === 'cuota')
+    .reduce((s, p) => s + p.monto, 0);
+}
+
+function getCuotaVencida(cliente) {
+  if (!cliente.cuota || !cliente.diaPago) return 0;
+  if (cliente.estado !== 'activo') return 0;
+  if (getSaldoPendiente(cliente) <= 0) return 0;
+
+  const hoy = new Date();
+  const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
+  if (cliente.mesInicioCobro && mesActual < cliente.mesInicioCobro) return 0;
+
+  const mesesVencidos = getMesesVencidos(cliente);
+  const totalAdeudado = mesesVencidos * cliente.cuota;
+  const totalPagadoCuotas = getTotalPagadoCuotas(cliente);
+
+  return Math.max(totalAdeudado - totalPagadoCuotas, 0);
 }
 
 function isMora(cliente) {
@@ -2870,32 +2877,7 @@ function isMora(cliente) {
   if (!cliente.diaPago) return false;
   if (getSaldoPendiente(cliente) <= 0) return false;
 
-  const hoy = new Date();
-  const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
-
-  if (cliente.mesInicioCobro && mesActual < cliente.mesInicioCobro) return false;
-
-  // Revisar los últimos 12 meses — si alguno tiene cuota pendiente, está en mora
-  for (let i = 0; i < 12; i++) {
-    const fecha = new Date(hoy.getFullYear(), hoy.getMonth() - i, cliente.diaPago);
-    
-    // Solo contar meses donde ya venció el día de pago
-    if (fecha > hoy) continue;
-
-    // Solo desde el mes de inicio de cobro
-    if (cliente.mesInicioCobro) {
-      const fechaStr = `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,'0')}`;
-      if (fechaStr < cliente.mesInicioCobro) break;
-    }
-
-    const pagadoEseMes = getPagadoEnMes(cliente, fecha.getMonth(), fecha.getFullYear());
-    const cuotaCubierta = pagadoEseMes >= (cliente.cuota || 0);
-
-    if (!cuotaCubierta) return true; // Tiene al menos un mes sin pagar → en mora
-    else break; // Pagó ese mes completo → no seguir revisando hacia atrás
-  }
-
-  return false;
+  return getCuotaVencida(cliente) > 0;
 }
 
 function getEstadoBadge(cliente) {
