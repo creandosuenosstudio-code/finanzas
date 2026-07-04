@@ -2417,14 +2417,19 @@ function convertirACOP(amount, currency) {
 
 // ─── REPORTES ─────────────────────────────────────────────────────────────────
 let metasMensuales = JSON.parse(localStorage.getItem('cs_metas') || '{}');
+let metaSaveTimeout = null;
 
 function saveMetaMensual() {
   const mes = document.getElementById('reportesMes')?.value || currentMonth();
   const val = parseAmt('metaMensual');
   metasMensuales[mes] = val;
   localStorage.setItem('cs_metas', JSON.stringify(metasMensuales));
-  saveConfig(); // Guardar en Sheet
   renderMetaBar(mes);
+
+  // Esperar a que la persona deje de escribir antes de guardar en el Sheet,
+  // así no se dispara una petición por cada tecla.
+  clearTimeout(metaSaveTimeout);
+  metaSaveTimeout = setTimeout(() => saveConfig(), 800);
 }
 
 function renderMetaBar(mes) {
@@ -2647,9 +2652,22 @@ function saveClientes() {
   }).catch(() => {});
 }
 
-function saveConfig() {
+async function saveConfig() {
   const pct = JSON.parse(localStorage.getItem('cs_pct') || '{}');
   const grupos = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || window._currentGrupos || {};
+
+  // Antes de guardar, traer la config más reciente del servidor y combinarla
+  // con la local. Esto evita que una copia vieja en otro dispositivo/pestaña
+  // borre cambios recientes (ej. la meta del mes) al guardar.
+  try {
+    const resC = await fetch(`${SCRIPT_URL}?action=getConfig&t=${Date.now()}`);
+    const serverConfig = await resC.json();
+    if (serverConfig && serverConfig.metas) {
+      metasMensuales = { ...serverConfig.metas, ...metasMensuales };
+      localStorage.setItem('cs_metas', JSON.stringify(metasMensuales));
+    }
+  } catch (e) {}
+
   fetch(SCRIPT_URL, {
     method: 'POST',
     body: JSON.stringify({ action: 'saveConfig', budgets, pct, expenseCats: EXPENSE_CATS, grupos, incomeCats: INCOME_CATS, metas: metasMensuales })
