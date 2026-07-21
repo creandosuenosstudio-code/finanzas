@@ -541,13 +541,22 @@
     </div>
 
     <!-- RESUMEN PRESUPUESTO -->
-    <div class="card" style="flex:1; min-width:220px; max-width:280px;">
-      <div class="card-title">RESUMEN DEL MES</div>
-      <div style="margin-bottom:16px;">
-        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:4px;">Total gastos fijos</div>
-        <div id="summaryTotal" style="font-family:'Space Grotesk';font-size:1.6rem;font-weight:700;color:var(--accent2);">$0</div>
+    <div class="card" style="flex:1; min-width:220px; max-width:300px;">
+      <div class="card-title">💼 COSTO REAL DE LA EMPRESA</div>
+      <div style="margin-bottom:14px;">
+        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:4px;">Costo fijo mensual (suma automática)</div>
+        <div id="summaryCostoReal" style="font-family:'Space Grotesk';font-size:1.7rem;font-weight:700;color:var(--accent2);">$0</div>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:2px;">Se actualiza solo al agregar o quitar categorías</div>
       </div>
-      <div style="margin-bottom:16px;">
+      <div style="margin-bottom:14px;padding-top:12px;border-top:1px solid var(--border);">
+        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:4px;">+ Diezmo y Ahorro Bóveda (según ingresos)</div>
+        <div id="summaryVariables" style="font-family:'Space Grotesk';font-size:1rem;font-weight:600;color:var(--muted);">$0</div>
+      </div>
+      <div style="margin-bottom:14px;padding-top:12px;border-top:1px solid var(--border);">
+        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:4px;">Total gastos fijos del mes</div>
+        <div id="summaryTotal" style="font-family:'Space Grotesk';font-size:1.3rem;font-weight:700;color:var(--text);">$0</div>
+      </div>
+      <div style="margin-bottom:14px;">
         <div style="font-size:0.75rem;color:var(--muted);margin-bottom:4px;">Total pagado</div>
         <div id="summarySpent" style="font-family:'Space Grotesk';font-size:1.2rem;font-weight:700;color:var(--green);">$0</div>
       </div>
@@ -1285,7 +1294,7 @@ function addExpenseCat() {
 }
 
 function deleteExpenseCat(cat, grupo) {
-  if (!confirm(`¿Eliminar la categoría "${cat}"?`)) return;
+  if (!confirm(`¿Eliminar la categoría "${cat}"? Esto también quitará su monto del cálculo de gastos fijos.`)) return;
   EXPENSE_CATS = EXPENSE_CATS.filter(c => c !== cat);
   saveExpenseCats();
 
@@ -1294,13 +1303,22 @@ function deleteExpenseCat(cat, grupo) {
   if (grupos[grupo]) {
     grupos[grupo].cats = grupos[grupo].cats.filter(c => c !== cat);
     localStorage.setItem('cs_grupos', JSON.stringify(grupos));
-    saveConfig();
   }
+
+  // Quitar el monto presupuestado de esta categoría en TODOS los meses
+  // para que el total de gastos fijos se actualice automáticamente
+  Object.keys(budgets).forEach(month => {
+    if (budgets[month] && Object.prototype.hasOwnProperty.call(budgets[month], cat)) {
+      delete budgets[month][cat];
+    }
+  });
+  localStorage.setItem('cs_budgets', JSON.stringify(budgets));
+  saveConfig();
 
   renderExpenseCatsList();
   updateAllCatSelects();
   renderBudget();
-  showToast(`Categoría "${cat}" eliminada`);
+  showToast(`Categoría "${cat}" eliminada · gastos fijos actualizados`);
 }
 
 function renderExpenseCatsList() {
@@ -1357,12 +1375,22 @@ function renderExpenseCatsList() {
 }
 
 function deleteExpenseCatHuerfana(cat) {
-  if (!confirm(`¿Eliminar la categoría "${cat}"?`)) return;
+  if (!confirm(`¿Eliminar la categoría "${cat}"? Esto también quitará su monto del cálculo de gastos fijos.`)) return;
   EXPENSE_CATS = EXPENSE_CATS.filter(c => c !== cat);
   saveExpenseCats();
+
+  Object.keys(budgets).forEach(month => {
+    if (budgets[month] && Object.prototype.hasOwnProperty.call(budgets[month], cat)) {
+      delete budgets[month][cat];
+    }
+  });
+  localStorage.setItem('cs_budgets', JSON.stringify(budgets));
+  saveConfig();
+
   renderExpenseCatsList();
   updateAllCatSelects();
-  showToast(`Categoría "${cat}" eliminada`);
+  renderBudget();
+  showToast(`Categoría "${cat}" eliminada · gastos fijos actualizados`);
 }
 
 function updateAllCatSelects() {
@@ -2179,6 +2207,8 @@ function renderBudget() {
   const totalGastadoBoveda = transactions.filter(t => t.type==='expense' && t.cat==='Ahorro Bóveda' && t.date && t.date.startsWith(month)).reduce((s,t)=>s+t.amount,0);
   const totalGastado = totalGastadoFijos + totalGastadoDiezmo + totalGastadoBoveda;
 
+  document.getElementById('summaryCostoReal').textContent = fmt(totalFijos);
+  document.getElementById('summaryVariables').textContent = fmt(valDiezmo + valBoveda);
   document.getElementById('summaryTotal').textContent = fmt(totalPresupuesto);
   document.getElementById('summarySpent').textContent = fmt(totalGastado);
   document.getElementById('summaryNeeded').textContent = fmt(Math.max(totalPresupuesto - totalGastado, 0));
@@ -2330,86 +2360,7 @@ function generarContrato(clienteId) {
 </style>
 </head>
 <body>
-<div class="logo"><img src="data:image/png;base64,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" style="height:80px;display:block;margin:0 auto 8px;"></div>
-
-<h1>CONTRATO DE PRESTACIÓN DE SERVICIOS &nbsp;&nbsp; Código: C-PS-PNN</h1>
-<div class="subtitulo"><strong>Fecha de Aplicación:</strong> ${diaHoy} de ${mesHoy} de ${anioHoy}</div>
-<div class="pagina">Página 1 de 4 &nbsp;&nbsp; <strong>Versión:</strong> 02</div>
-
-<table>
-  <tr><td>CONTRATO No.</td><td>${numContrato}</td></tr>
-  <tr><td>CONTRATANTE:</td><td>${c.nombre}</td></tr>
-  <tr><td>NIT o C.C</td><td>${c.tipoDoc || 'C.C.'} ${c.numDoc || '___________________________'}</td></tr>
-  <tr><td>CONTRATISTA:</td><td>CREANDO SUEÑOS STUDIO</td></tr>
-  <tr><td>NIT</td><td>901689412</td></tr>
-  <tr><td>REPRESENTANTE LEGAL</td><td>JUAN PABLO MONDRAGÓN</td></tr>
-  <tr><td>CÉDULA DE CIUDADANÍA</td><td>1.144.103.167 expedida en Cali (V)</td></tr>
-  <tr><td>OBJETO:</td><td>${textoContrato.objeto}</td></tr>
-  <tr><td>VALOR HONORARIOS:</td><td>${monedaSimbolo}${totalFmt} ${c.moneda || 'COP'}</td></tr>
-  <tr><td>DURACIÓN:</td><td>${mesesContrato} meses</td></tr>
-  <tr><td>FECHA DE INICIO:</td><td>${fechaInicio}</td></tr>
-  <tr><td>FECHA DE TERMINACIÓN:</td><td>${fechaFin}</td></tr>
-  <tr><td>SUPERVISOR:</td><td>VALENTINA MUÑOZ</td></tr>
-  <tr><td>CÉDULA DE CIUDADANÍA</td><td>1.112.488.846 expedida en Jamundi (V)</td></tr>
-</table>
-
-<div class="clausula">
-Entre los suscritos a saber, <strong>${c.nombre}</strong> identificado con ${c.tipoDoc || 'C.C.'} No. <strong>${c.numDoc || '___________________________'}</strong> persona quien para efectos del presente contrato se denominará <strong>EL CONTRATANTE</strong> por una parte y por otra, <strong>JUAN PABLO MONDRAGÓN</strong>, identificado con la cédula de ciudadanía No. 1.144.103.167 expedida en Cali (V), representante legal de CREANDO SUEÑOS STUDIO CON NIT 901689412, quien para los efectos del presente contrato se denominará <strong>EL CONTRATISTA</strong>, hemos acordado celebrar el presente Contrato de Prestación de Servicios el cual se regirá por las siguientes cláusulas:
-</div>
-
-<div class="clausula">
-<strong>PRIMERA.– OBJETO: EL CONTRATISTA</strong> se obliga a prestar sus servicios profesionales de producción musical, Producción audiovisual, Distribución en plataformas digitales y Pack de Marketing, de manera independiente, sin que exista subordinación laboral, utilizando sus propios medios, para realizar actividades que permitan el cumplimiento del objeto del presente contrato.
-</div>
-
-<div class="clausula">
-<strong>SEGUNDA. -ALCANCE DEL OBJETO:</strong> ${alcanceTexto.split('\n').join('<br>')}
-</div>
-
-<div class="clausula">
-<strong>TERCERA. - DURACIÓN:</strong> La duración del presente contrato será por el término de <strong>${mesesContrato}</strong> meses, e iniciará a partir del día <strong>${fechaInicio}</strong>, hasta el día <strong>${fechaFin}</strong>. <strong>PARÁGRAFO</strong>: Cualquier modificación o adición debe hacerse antes del vencimiento del contrato y se deben añadir los soportes correspondientes.
-</div>
-
-<div class="clausula">
-<strong>CUARTA. - VALOR DEL CONTRATO Y FORMA DE PAGO:</strong> El valor total del contrato que se reconocerá a <strong>EL CONTRATISTA</strong> será por la suma de <strong>${monedaSimbolo}${totalFmt} ${c.moneda || 'COP'}</strong> los cuales se cancelarán en <strong>${mesesContrato}</strong> cuotas de <strong>${monedaSimbolo}${cuotaFmt}</strong> los días <strong>${c.diaPago || '___'}</strong> de cada mes.
-</div>
-
-<div class="clausula">
-<strong>QUINTA.- OBLIGACIONES DE EL CONTRATISTA: EL CONTRATISTA</strong> se compromete a: <strong>1)</strong> Obrar con máxima diligencia la consecución del objeto <strong>2)</strong> Cumplir con los plazos establecidos.; <strong>3)</strong> Regirse a los procedimientos y formatos establecidos por el sistema de calidad establecidos internamente en <strong>CREANDO SUEÑOS STUDIO 5)</strong> Informar Al contratante con la debida motivación y anticipación de cualquier contratiempo o dificultad que le impida el cumplimiento del contrato <strong>6)</strong> Conocer y cumplir las políticas de seguridad informática de la información establecidos por las partes, en consecuencia, <strong>EL CONTRATISTA</strong> no podrá difundir, transmitir o revelar cualquier información a la que tenga acceso del <strong>CONTRATANTE</strong> en ejecución del presente contrato, ni a utilizar tal información en interés propio o de terceras personas. <strong>7)</strong> Las demás obligaciones que surjan de la naturaleza y obligaciones propias del presente contrato.
-</div>
-
-<div class="clausula">
-<strong>SEXTA - TERMINACIÓN:</strong> Las partes podrán dar por terminado el presente contrato por: <strong>1)</strong> Mutuo acuerdo sin que haya lugar al pago de indemnización; <strong>2)</strong> Por incumplimiento de cualquiera de las obligaciones del contrato; <strong>3)</strong> La mora por parte del <strong>CONTRATANTE</strong> en el pago del precio pactado en este contrato; <strong>4)</strong> Por situaciones que impidan cumplir el contrato, como son la fuerza mayor o el caso fortuito; y las demás que establezca la ley.
-</div>
-
-<div class="clausula">
-<strong>SÉPTIMA - SUSPENSIÓN TEMPORAL DEL CONTRATO:</strong> El plazo de ejecución del presente contrato podrá suspenderse excepcionalmente de manera temporal en las siguientes circunstancias: <strong>1)</strong> Por mutuo acuerdo de las partes. <strong>2)</strong> Por solicitud del contratista por causa debidamente justificada y aceptada por <strong>EL CONTRATANTE 3)</strong> Por incapacidad médica que impida la prestación del servicio debidamente soportada. <strong>4)</strong> Por circunstancias de fuerza mayor o caso fortuito.
-</div>
-
-<div class="clausula">
-<strong>OCTAVA- PROPIEDAD INTELECTUAL Y TITULARIDAD DE DERECHOS:</strong> Las partes acuerdan que el presente contrato corresponde exclusivamente a una prestación de servicios de producción musical, audiovisual y apoyo en marketing. En consecuencia, el CONTRATISTA no adquiere ni reclamará ningún derecho de propiedad intelectual sobre la obra musical, su composición, melodía, armonía, letra, producción fonográfica o audiovisual derivada del presente proyecto. La totalidad de los derechos patrimoniales y de explotación sobre la obra y los materiales resultantes pertenecerán única y exclusivamente al ARTISTA, quien será titular del cien por ciento (100%) de dichos derechos.
-</div>
-
-<div class="clausula">
-<strong>NOVENA - PERFECCIONAMIENTO:</strong> El presente contrato se entiende perfeccionado con la firma de las partes.
-</div>
-
-<div class="clausula">
-Para constancia se firma en dos ejemplares del mismo tenor, en Santiago de Cali a los <strong>${diaHoy}</strong> días del mes de <strong>${mesHoy} de ${anioHoy}</strong>
-</div>
-
-<div class="firmas">
-  <div class="firma-bloque">
-    <strong>EL CONTRATANTE</strong>
-    <div style="height:80px;"></div>
-    <div class="firma-linea">
-      ${c.nombre}<br>
-      ${c.numDoc ? (c.tipoDoc || 'C.C.') + ' ' + c.numDoc : ''}
-    </div>
-  </div>
-  <div class="firma-bloque">
-    <strong>EL CONTRATISTA</strong>
-    <div class="firma-espacio">
-      <img src="data:image/png;base64,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" style="height:70px;display:block;">
+<div class="logo"><img src="data:image/png;base64,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" style="height:70px;display:block;">
     </div>
     <div class="firma-linea">
       JUAN PABLO MONDRAGÓN<br>
@@ -2421,7 +2372,6 @@ Para constancia se firma en dos ejemplares del mismo tenor, en Santiago de Cali 
 </body>
 </html>`;
 
-  // Mostrar modal con iframe en vez de ventana emergente
   const modalId = 'contratoModal_' + Date.now();
   const modal = document.createElement('div');
   modal.id = modalId;
@@ -2440,10 +2390,8 @@ Para constancia se firma en dos ejemplares del mismo tenor, en Santiago de Cali 
   `;
   document.body.appendChild(modal);
 
-  // Cargar contrato en iframe
   const iframe = document.getElementById('contratoIframe');
   iframe.onload = function() {
-    // Botón de imprimir
     document.getElementById('btnImprimirContrato').onclick = function() {
       iframe.contentWindow.focus();
       iframe.contentWindow.print();
@@ -2469,7 +2417,6 @@ async function fetchTasa() {
     tasaFetched = true;
     return tasaUSD;
   } catch(e) {
-    // Fallback a tasa guardada o manual
     return tasaUSD || 4200;
   }
 }
@@ -2505,7 +2452,7 @@ function saveMetaMensual() {
   const val = parseAmt('metaMensual');
   metasMensuales[mes] = val;
   localStorage.setItem('cs_metas', JSON.stringify(metasMensuales));
-  saveConfig(); // Guardar en Sheet
+  saveConfig();
   renderMetaBar(mes);
 }
 
@@ -2542,7 +2489,6 @@ function renderMetaBar(mes) {
 function renderReportes() {
   const mes = document.getElementById('reportesMes')?.value || currentMonth();
 
-  // Poblar selector de meses
   const meses = getMonths();
   const sel = document.getElementById('reportesMes');
   if (sel) {
@@ -2550,7 +2496,6 @@ function renderReportes() {
     sel.innerHTML = meses.map(m => `<option value="${m}" ${m===cur?'selected':''}>${formatMonthLabel(m)}</option>`).join('');
   }
 
-  // Meta mensual
   const metaInput = document.getElementById('metaMensual');
   if (metaInput && metasMensuales[mes]) {
     metaInput.value = new Intl.NumberFormat('es-CO').format(metasMensuales[mes]);
@@ -2559,13 +2504,10 @@ function renderReportes() {
   }
   renderMetaBar(mes);
 
-  // Reporte de cierre
   renderCierre(mes);
 
-  // Mora WhatsApp
   renderMoraWhatsapp();
 
-  // Proyección
   renderProyeccion();
 }
 
@@ -2580,7 +2522,6 @@ function renderCierre(mes) {
   const totalExpense = txMes.filter(t => t.type==='expense').reduce((s,t)=>s+t.amount,0);
   const ganancia = totalIncome - totalExpense;
 
-  // Mes anterior para comparar
   const [y, m] = mes.split('-').map(Number);
   const prevDate = new Date(y, m-2, 1);
   const prevMes = `${prevDate.getFullYear()}-${String(prevDate.getMonth()+1).padStart(2,'0')}`;
@@ -2592,12 +2533,10 @@ function renderCierre(mes) {
   const diffIncome = prevIncome > 0 ? ((totalIncome - prevIncome)/prevIncome*100).toFixed(1) : null;
   const diffGanancia = prevGanancia !== 0 ? ((ganancia - prevGanancia)/Math.abs(prevGanancia)*100).toFixed(1) : null;
 
-  // Top categorías de ingreso
   const catMap = {};
   txMes.filter(t => t.type==='income').forEach(t => { catMap[t.cat] = (catMap[t.cat]||0) + (t.amountCOP||t.amount); });
   const topCats = Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,3);
 
-  // Artistas que pagaron este mes
   const artistasPagaron = [...new Set(txMes.filter(t=>t.type==='income').map(t=>t.desc))].length;
 
   el.innerHTML = `
@@ -2722,7 +2661,6 @@ let currentClienteId = null;
 
 function saveClientes() {
   localStorage.setItem('cs_clientes', JSON.stringify(clientes));
-  // Guardar en Sheet también
   fetch(SCRIPT_URL, {
     method: 'POST',
     body: JSON.stringify({ action: 'saveArtistas', artistas: clientes })
@@ -2855,7 +2793,6 @@ function saveCliente() {
     pagos: clientes.find(x => x.id === id)?.pagos || []
   };
 
-  // Si tiene cuota inicial y es cliente nuevo, agregarla como primer pago
   const existing = clientes.find(x => x.id === id);
   if (!existing && cliente.inicial > 0) {
     const pagoInicial = {
@@ -2957,14 +2894,11 @@ function isMora(cliente) {
 
   if (cliente.mesInicioCobro && mesActual < cliente.mesInicioCobro) return false;
 
-  // Revisar los últimos 12 meses — si alguno tiene cuota pendiente, está en mora
   for (let i = 0; i < 12; i++) {
     const fecha = new Date(hoy.getFullYear(), hoy.getMonth() - i, cliente.diaPago);
     
-    // Solo contar meses donde ya venció el día de pago
     if (fecha > hoy) continue;
 
-    // Solo desde el mes de inicio de cobro
     if (cliente.mesInicioCobro) {
       const fechaStr = `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,'0')}`;
       if (fechaStr < cliente.mesInicioCobro) break;
@@ -2973,8 +2907,8 @@ function isMora(cliente) {
     const pagadoEseMes = getPagadoEnMes(cliente, fecha.getMonth(), fecha.getFullYear());
     const cuotaCubierta = pagadoEseMes >= (cliente.cuota || 0);
 
-    if (!cuotaCubierta) return true; // Tiene al menos un mes sin pagar → en mora
-    else break; // Pagó ese mes completo → no seguir revisando hacia atrás
+    if (!cuotaCubierta) return true;
+    else break;
   }
 
   return false;
@@ -3006,7 +2940,6 @@ function renderClientes() {
   const filterEstado = document.getElementById('filterEstadoCliente')?.value || '';
   const filterPais = document.getElementById('filterPais')?.value || '';
 
-  // Populate pais filter
   const paises = [...new Set(clientes.map(c => c.pais).filter(Boolean))].sort();
   const paisSel = document.getElementById('filterPais');
   if (paisSel) {
@@ -3030,11 +2963,9 @@ function renderClientes() {
     return matchSearch && matchPago && matchEstado && matchPais;
   });
 
-  // Stats
   document.getElementById('statActivos').textContent = clientes.filter(c => c.estado === 'activo').length;
   document.getElementById('statMora').textContent = clientes.filter(c => isMora(c)).length;
   document.getElementById('statPausa').textContent = clientes.filter(c => c.estado === 'pausado').length;
-  // Cartera = solo cuotas vencidas de clientes en mora
   const carteraCOP = clientes.filter(c => (c.moneda||'COP')==='COP').reduce((s,c) => s + getCuotaVencida(c), 0);
   const carteraUSD = clientes.filter(c => c.moneda==='USD').reduce((s,c) => s + getCuotaVencida(c), 0);
   document.getElementById('statCartera').textContent = fmt(carteraCOP);
@@ -3109,10 +3040,8 @@ function openFicha(id) {
   document.getElementById('pagoFecha').value = new Date().toISOString().slice(0,10);
   document.getElementById('abonoFecha').value = new Date().toISOString().slice(0,10);
 
-  // Cargar notas
   renderNotasList();
 
-  // Cargar producción
   const cancionesEl = document.getElementById('cancionesEntregadas');
   const notaProdEl = document.getElementById('notaProduccion');
   if (cancionesEl) cancionesEl.value = c.cancionesEntregadas || 0;
@@ -3195,7 +3124,6 @@ function registrarPago(tipo = 'cuota') {
   const c = clientes.find(x => x.id === currentClienteId);
   if (!c) return;
 
-  // Si es cuota y el monto supera la cuota pactada, preguntar qué hacer con el excedente
   if (esCuota && c.cuota && monto > c.cuota) {
     const excedente = monto - c.cuota;
     const opcion = confirm(
@@ -3208,13 +3136,11 @@ function registrarPago(tipo = 'cuota') {
     const esInicial = (c.pagos || []).length === 0;
     const numRecibo = 'CS-' + Date.now().toString().slice(-6);
 
-    // Registrar la cuota normal
     const pagoCuota = { id: Date.now().toString(), monto: c.cuota, fecha, medio, registradoPor: getWho(), numRecibo, tipo: 'cuota' };
     c.pagos = c.pagos || [];
     c.pagos.push(pagoCuota);
 
     if (opcion) {
-      // Adelanto: marcar el próximo mes como pagado (con fecha del próximo mes)
       const fechaActual = new Date(fecha);
       const proximoMes = new Date(fechaActual.getFullYear(), fechaActual.getMonth() + 1, fechaActual.getDate());
       const fechaProximo = proximoMes.toISOString().slice(0, 10);
@@ -3231,7 +3157,6 @@ function registrarPago(tipo = 'cuota') {
       c.pagos.push(pagoAdelanto);
       showToast(`✓ Cuota registrada + próxima cuota adelantada (${fmt(excedente, c.moneda)})`);
     } else {
-      // Abono al capital
       const pagoCapital = {
         id: (Date.now() + 1).toString(),
         monto: excedente,
@@ -3245,7 +3170,6 @@ function registrarPago(tipo = 'cuota') {
       showToast(`✓ Cuota + abono al capital de ${fmt(excedente, c.moneda)}`);
     }
 
-    // Registrar el ingreso total en finanzas (todo en este mes)
     registrarIngresoCliente(c, monto, fecha, medio);
     saveClientes();
     document.getElementById(esCuota ? 'pagoMonto' : 'abonoMonto').value = '';
@@ -3259,7 +3183,6 @@ function registrarPago(tipo = 'cuota') {
     return;
   }
 
-  // Pago normal sin excedente
   const esInicial = (c.pagos || []).length === 0;
   const numRecibo = 'CS-' + Date.now().toString().slice(-6);
   const pago = {
@@ -3376,7 +3299,6 @@ function generarRecibo(c, pago, esInicial) {
 </body>
 </html>`;
 
-  // Mostrar modal con el recibo
   const modal = document.createElement('div');
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;';
   modal.innerHTML = `
@@ -3408,7 +3330,6 @@ async function descargarReciboImagen() {
   btn.disabled = true;
 
   try {
-    // Cargar html2canvas si no está cargado
     if (!window.html2canvas) {
       await new Promise((res, rej) => {
         const s = document.createElement('script');
@@ -3433,7 +3354,6 @@ async function descargarReciboImagen() {
     link.click();
     showToast('✓ Imagen descargada');
   } catch(e) {
-    // Fallback: abrir en nueva ventana para guardar manualmente
     const win = window.open('', '_blank');
     win.document.write(window._reciboHTML || '');
     showToast('Abre la ventana y guarda como imagen con clic derecho.', 'error');
@@ -3461,7 +3381,6 @@ function generarReciboMovimiento(txId) {
   const t = transactions.find(x => String(x.id) === String(txId));
   if (!t) return;
 
-  // Si es pago de artista, buscar el artista y generar recibo completo
   const cliente = clientes.find(c => c.nombre === t.desc);
   if (cliente && t.type === 'income') {
     const pago = (cliente.pagos || []).find(p => p.monto === t.amount && p.fecha === t.date);
@@ -3472,7 +3391,6 @@ function generarReciboMovimiento(txId) {
     }
   }
 
-  // Comprobante genérico para otros movimientos
   const numRef = 'CS-' + String(t.id).slice(-6);
   const recibo = `
 <!DOCTYPE html>
@@ -3671,14 +3589,12 @@ function deletePago(clienteId, pagoId) {
 document.getElementById('fDate').value = new Date().toISOString().slice(0,10);
 updateAllCatSelects();
 updateAllServiceSelects();
-// Cargar porcentajes guardados
 const savedPct = JSON.parse(localStorage.getItem('cs_pct') || '{}');
 if (savedPct.diezmo && document.getElementById('pctDiezmo')) document.getElementById('pctDiezmo').value = savedPct.diezmo;
 if (savedPct.boveda && document.getElementById('pctBoveda')) document.getElementById('pctBoveda').value = savedPct.boveda;
 const savedInversion = localStorage.getItem('cs_inversion');
 if (savedInversion && document.getElementById('montoInversion')) document.getElementById('montoInversion').value = savedInversion;
 fetchTasa().then(() => loadData());
-// Auto-refresh desactivado en modo prueba - se activa en versión final
 // setInterval(loadData, 60000);
 </script>
 </body>
