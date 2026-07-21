@@ -480,26 +480,45 @@
 
     <!-- GESTOR DE CATEGORÍAS -->
     <div id="catManagerPanel" style="display:none;margin-bottom:20px;">
-      <div class="card" style="max-width:560px;">
-        <div class="card-title">⚙️ GESTIONAR CATEGORÍAS DE GASTOS</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;margin-bottom:16px;align-items:flex-end;">
-          <div>
-            <label>Nueva categoría</label>
-            <input type="text" id="newCatInput" placeholder="Nombre...">
+      <div class="card" style="max-width:600px;">
+        <div class="card-title">⚙️ GESTIONAR CATEGORÍAS Y GRUPOS</div>
+
+        <!-- Agregar categoría -->
+        <div style="margin-bottom:20px;">
+          <div style="font-size:0.75rem;color:var(--accent2);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">➕ Nueva categoría</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:flex-end;">
+            <div>
+              <label>Nombre</label>
+              <input type="text" id="newCatInput" placeholder="Nombre de la categoría...">
+            </div>
+            <div>
+              <label>Grupo</label>
+              <select id="newCatGrupo"></select>
+            </div>
+            <button class="btn-primary" style="width:auto;padding:11px 18px;margin:0;" onclick="addExpenseCat()">+ Agregar</button>
           </div>
-          <div>
-            <label>Grupo</label>
-            <select id="newCatGrupo">
-              <option value="Equipo">👥 Equipo</option>
-              <option value="Sede">🏢 Sede</option>
-              <option value="Publicidad">📣 Publicidad</option>
-              <option value="Otros">📦 Otros</option>
-            </select>
-          </div>
-          <button class="btn-primary" style="width:auto;padding:11px 18px;margin:0;" onclick="addExpenseCat()">+ Agregar</button>
         </div>
+
+        <!-- Crear grupo nuevo -->
+        <div style="margin-bottom:20px;padding:14px;background:var(--surface2);border-radius:10px;">
+          <div style="font-size:0.75rem;color:var(--yellow);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">🗂 Crear nuevo grupo</div>
+          <div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:flex-end;">
+            <div>
+              <label>Nombre del grupo</label>
+              <input type="text" id="newGrupoNombre" placeholder="Ej: Tecnología, Viajes...">
+            </div>
+            <div>
+              <label>Emoji</label>
+              <input type="text" id="newGrupoEmoji" placeholder="📱" style="width:60px;text-align:center;">
+            </div>
+            <button class="refresh-btn" style="padding:11px 16px;" onclick="crearGrupo()">Crear grupo</button>
+          </div>
+        </div>
+
+        <!-- Lista de categorías por grupo -->
+        <div style="font-size:0.75rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">📋 Categorías actuales</div>
         <div id="expenseCatsList"></div>
-        <div style="font-size:0.72rem;color:var(--muted);margin-top:12px;">💡 "Programas" no se puede eliminar porque tiene función especial.</div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:12px;">💡 "Programas" no se puede eliminar. Puedes mover categorías entre grupos con el selector.</div>
       </div>
     </div>
 
@@ -1288,23 +1307,62 @@ function renderExpenseCatsList() {
   const list = document.getElementById('expenseCatsList');
   if (!list) return;
   const grupos = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || window._currentGrupos || {};
-  const grupoLabels = { Equipo:'👥 Equipo', Sede:'🏢 Sede', Publicidad:'📣 Publicidad', Otros:'📦 Otros' };
   const grupoColors = { Equipo:'#22d3ee', Sede:'#60a5fa', Publicidad:'#fbbf24', Otros:'#34d399' };
+  const grupoOptions = Object.keys(grupos).map(g => `<option value="${g}">${grupos[g].label||g}</option>`).join('');
+
+  const catsEnGrupos = Object.values(grupos).flatMap(g => g.cats || []);
+  const huerfanas = EXPENSE_CATS.filter(c => !catsEnGrupos.includes(c));
 
   let html = '';
   for (const [gName, cfg] of Object.entries(grupos)) {
-    if (!cfg.cats || !cfg.cats.length) continue;
-    html += `<div style="margin-bottom:12px;">
-      <div style="font-size:0.72rem;font-weight:700;color:${grupoColors[gName]||'var(--muted)'};letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;">${grupoLabels[gName]||gName}</div>
-      ${cfg.cats.map(cat => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--surface2);border-radius:7px;margin-bottom:4px;">
-          <span style="font-size:0.85rem;">${cat}</span>
+    const color = grupoColors[gName] || cfg.color || 'var(--muted)';
+    const label = cfg.label || gName;
+    const isEmpty = !cfg.cats || cfg.cats.length === 0;
+    html += `<div style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div style="font-size:0.72rem;font-weight:700;color:${color};letter-spacing:0.06em;text-transform:uppercase;">${label}</div>
+        ${isEmpty ? `<button onclick="eliminarGrupo('${gName}')" style="font-size:0.7rem;color:var(--red);background:none;border:none;cursor:pointer;">🗑 Eliminar grupo</button>` : ''}
+      </div>
+      ${isEmpty ? `<div style="font-size:0.78rem;color:var(--muted);padding:8px 0;">Sin categorías — puedes eliminarlo</div>` :
+        cfg.cats.map(cat => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--surface2);border-radius:7px;margin-bottom:4px;gap:8px;">
+          <span style="font-size:0.85rem;flex:1;">${cat}</span>
+          <select onchange="moverCategoria('${cat}','${gName}',this.value)" style="font-size:0.72rem;padding:3px 6px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--muted);">
+            ${Object.keys(grupos).map(g => `<option value="${g}" ${g===gName?'selected':''}>${grupos[g].label||g}</option>`).join('')}
+          </select>
           ${cat === 'Programas' ? '<span style="font-size:0.7rem;color:var(--muted);">fijo</span>' : `<button class="delete-btn" onclick="deleteExpenseCat('${cat}','${gName}')">✕</button>`}
         </div>
       `).join('')}
     </div>`;
   }
+
+  if (huerfanas.length) {
+    html += `<div style="margin-bottom:12px;">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--red);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;">⚠️ Sin grupo asignado</div>
+      ${huerfanas.map(cat => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:7px;margin-bottom:4px;gap:8px;">
+          <span style="font-size:0.85rem;flex:1;">${cat}</span>
+          <select onchange="moverCategoria('${cat}','__none',this.value)" style="font-size:0.72rem;padding:3px 6px;background:var(--surface);border:1px solid var(--border);border-radius:6px;">
+            <option value="">— Asignar grupo —</option>
+            ${Object.keys(grupos).map(g => `<option value="${g}">${grupos[g].label||g}</option>`).join('')}
+          </select>
+          <button class="delete-btn" onclick="deleteExpenseCatHuerfana('${cat}')">✕</button>
+        </div>
+      `).join('')}
+    </div>`;
+  }
+
   list.innerHTML = html || '<div style="color:var(--muted);font-size:0.85rem;">Sin categorías.</div>';
+  populateGrupoSelects();
+}
+
+function deleteExpenseCatHuerfana(cat) {
+  if (!confirm(`¿Eliminar la categoría "${cat}"?`)) return;
+  EXPENSE_CATS = EXPENSE_CATS.filter(c => c !== cat);
+  saveExpenseCats();
+  renderExpenseCatsList();
+  updateAllCatSelects();
+  showToast(`Categoría "${cat}" eliminada`);
 }
 
 function updateAllCatSelects() {
@@ -1815,13 +1873,80 @@ function toggleServiceManager() {
   if (!visible) renderIncomeCatsList();
 }
 
+function crearGrupo() {
+  const nombre = document.getElementById('newGrupoNombre').value.trim();
+  const emoji = document.getElementById('newGrupoEmoji').value.trim() || '📁';
+  if (!nombre) { showToast('Escribe el nombre del grupo.', 'error'); return; }
+
+  const grupos = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || window._currentGrupos || {};
+  if (grupos[nombre]) { showToast('Ese grupo ya existe.', 'error'); return; }
+
+  grupos[nombre] = {
+    cats: [],
+    color: '#a78bfa',
+    bg: 'rgba(167,139,250,0.08)',
+    border: 'rgba(167,139,250,0.3)',
+    label: `${emoji} ${nombre}`
+  };
+  localStorage.setItem('cs_grupos', JSON.stringify(grupos));
+  saveConfig();
+  document.getElementById('newGrupoNombre').value = '';
+  document.getElementById('newGrupoEmoji').value = '';
+  populateGrupoSelects();
+  renderExpenseCatsList();
+  showToast(`✓ Grupo "${nombre}" creado`);
+}
+
+function eliminarGrupo(gName) {
+  if (!confirm(`¿Eliminar el grupo "${gName}"? Las categorías quedarán sin grupo.`)) return;
+  const grupos = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || window._currentGrupos || {};
+  delete grupos[gName];
+  localStorage.setItem('cs_grupos', JSON.stringify(grupos));
+  saveConfig();
+  populateGrupoSelects();
+  renderExpenseCatsList();
+  showToast(`Grupo "${gName}" eliminado`);
+}
+
+function moverCategoria(cat, grupoActual, nuevoGrupo) {
+  if (!nuevoGrupo || grupoActual === nuevoGrupo) return;
+  const grupos = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || window._currentGrupos || {};
+
+  // Quitar del grupo actual si tiene uno
+  if (grupoActual && grupoActual !== '__none' && grupos[grupoActual]) {
+    grupos[grupoActual].cats = grupos[grupoActual].cats.filter(c => c !== cat);
+  }
+  // Agregar al nuevo grupo
+  if (grupos[nuevoGrupo]) {
+    grupos[nuevoGrupo].cats = grupos[nuevoGrupo].cats || [];
+    if (!grupos[nuevoGrupo].cats.includes(cat)) grupos[nuevoGrupo].cats.push(cat);
+  }
+  localStorage.setItem('cs_grupos', JSON.stringify(grupos));
+  saveConfig();
+  renderExpenseCatsList();
+  showToast(`✓ "${cat}" movida a ${nuevoGrupo}`);
+}
+
+function populateGrupoSelects() {
+  const grupos = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || window._currentGrupos || {};
+  const options = Object.entries(grupos).map(([key, val]) => `<option value="${key}">${val.label || key}</option>`).join('');
+  const selects = ['newCatGrupo'];
+  selects.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = options;
+  });
+}
+
 function toggleCatManager() {
   const panel = document.getElementById('catManagerPanel');
   const btn = document.getElementById('btnCatManager');
   const visible = panel.style.display !== 'none';
   panel.style.display = visible ? 'none' : 'block';
   btn.textContent = visible ? '⚙️ Gestionar categorías' : '✕ Cerrar';
-  if (!visible) renderExpenseCatsList();
+  if (!visible) {
+    populateGrupoSelects();
+    renderExpenseCatsList();
+  }
 }
 
 function onBudgetCatChange() {
