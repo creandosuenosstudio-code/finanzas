@@ -563,49 +563,6 @@
 
     <div class="budget-grid" id="budgetGrid"></div>
 
-    <!-- VARIABLES PORCENTUALES -->
-    <div style="grid-column:1/-1; margin-top:24px;">
-      <div style="padding:10px 16px;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.3);border-radius:10px;margin-bottom:12px;">
-        <span style="font-family:'Space Grotesk';font-weight:600;font-size:0.9rem;color:#fb923c;">📊 Variables (% de lo facturado)</span>
-      </div>
-      <div class="budget-grid">
-        <!-- Diezmo -->
-        <div class="budget-item" style="border-color:rgba(251,146,60,0.2);">
-          <div class="budget-header">
-            <div class="budget-cat" style="color:#fb923c;">Diezmo</div>
-            <div class="budget-amounts">
-              <div style="display:flex;align-items:center;gap:6px;">
-                <input type="number" id="pctDiezmo" value="5" min="0" max="100" style="width:50px;padding:4px 6px;font-size:0.8rem;text-align:center;" onchange="renderVariables()">
-                <span style="color:var(--muted);font-size:0.8rem;">%</span>
-              </div>
-            </div>
-          </div>
-          <div style="margin-top:8px;">
-            <div style="font-size:0.75rem;color:var(--muted);margin-bottom:4px;">Corresponde este mes</div>
-            <div id="valDiezmo" style="font-family:'Space Grotesk';font-size:1.1rem;font-weight:700;color:#fb923c;">$0</div>
-          </div>
-          <div style="font-size:0.73rem;color:var(--muted);margin-top:6px;" id="pagoDiezmo">— Sin registrar pago</div>
-        </div>
-        <!-- Ahorro Bóveda -->
-        <div class="budget-item" style="border-color:rgba(251,146,60,0.2);">
-          <div class="budget-header">
-            <div class="budget-cat" style="color:#fb923c;">Ahorro Bóveda</div>
-            <div class="budget-amounts">
-              <div style="display:flex;align-items:center;gap:6px;">
-                <input type="number" id="pctBoveda" value="19" min="0" max="100" style="width:50px;padding:4px 6px;font-size:0.8rem;text-align:center;" onchange="renderVariables()">
-                <span style="color:var(--muted);font-size:0.8rem;">%</span>
-              </div>
-            </div>
-          </div>
-          <div style="margin-top:8px;">
-            <div style="font-size:0.75rem;color:var(--muted);margin-bottom:4px;">Corresponde este mes</div>
-            <div id="valBoveda" style="font-family:'Space Grotesk';font-size:1.1rem;font-weight:700;color:#fb923c;">$0</div>
-          </div>
-          <div style="font-size:0.73rem;color:var(--muted);margin-top:6px;" id="pagoBoveda">— Sin registrar pago</div>
-        </div>
-      </div>
-    </div>
-
     <div id="budgetEmpty" class="empty-state" style="display:none">
       <div class="emoji">🎯</div>
       <div>Agrega tus gastos fijos para empezar</div>
@@ -2417,19 +2374,14 @@ function convertirACOP(amount, currency) {
 
 // ─── REPORTES ─────────────────────────────────────────────────────────────────
 let metasMensuales = JSON.parse(localStorage.getItem('cs_metas') || '{}');
-let metaSaveTimeout = null;
 
 function saveMetaMensual() {
   const mes = document.getElementById('reportesMes')?.value || currentMonth();
   const val = parseAmt('metaMensual');
   metasMensuales[mes] = val;
   localStorage.setItem('cs_metas', JSON.stringify(metasMensuales));
+  saveConfig(); // Guardar en Sheet
   renderMetaBar(mes);
-
-  // Esperar a que la persona deje de escribir antes de guardar en el Sheet,
-  // así no se dispara una petición por cada tecla.
-  clearTimeout(metaSaveTimeout);
-  metaSaveTimeout = setTimeout(() => saveConfig(), 800);
 }
 
 function renderMetaBar(mes) {
@@ -2652,22 +2604,9 @@ function saveClientes() {
   }).catch(() => {});
 }
 
-async function saveConfig() {
+function saveConfig() {
   const pct = JSON.parse(localStorage.getItem('cs_pct') || '{}');
   const grupos = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || window._currentGrupos || {};
-
-  // Antes de guardar, traer la config más reciente del servidor y combinarla
-  // con la local. Esto evita que una copia vieja en otro dispositivo/pestaña
-  // borre cambios recientes (ej. la meta del mes) al guardar.
-  try {
-    const resC = await fetch(`${SCRIPT_URL}?action=getConfig&t=${Date.now()}`);
-    const serverConfig = await resC.json();
-    if (serverConfig && serverConfig.metas) {
-      metasMensuales = { ...serverConfig.metas, ...metasMensuales };
-      localStorage.setItem('cs_metas', JSON.stringify(metasMensuales));
-    }
-  } catch (e) {}
-
   fetch(SCRIPT_URL, {
     method: 'POST',
     body: JSON.stringify({ action: 'saveConfig', budgets, pct, expenseCats: EXPENSE_CATS, grupos, incomeCats: INCOME_CATS, metas: metasMensuales })
@@ -2844,10 +2783,22 @@ function getSaldoPendiente(cliente) {
   return Math.max(cliente.total - getTotalPagado(cliente), 0);
 }
 
-function getMesesVencidos(cliente) {
-  if (!cliente.diaPago) return 0;
+function getPagadoEnMes(cliente, mes, anio) {
+  return (cliente.pagos || [])
+    .filter(p => {
+      if (p.tipo === 'capital') return false;
+      const fp = new Date(p.fecha);
+      return fp.getMonth() === mes && fp.getFullYear() === anio;
+    })
+    .reduce((s, p) => s + p.monto, 0);
+}
+
+function getCuotaVencida(cliente) {
+  if (!isMora(cliente)) return 0;
+  if (!cliente.cuota || !cliente.diaPago) return 0;
+
   const hoy = new Date();
-  let meses = 0;
+  let totalVencido = 0;
 
   for (let i = 0; i < 12; i++) {
     const fecha = new Date(hoy.getFullYear(), hoy.getMonth() - i, cliente.diaPago);
@@ -2858,36 +2809,17 @@ function getMesesVencidos(cliente) {
       if (fechaStr < cliente.mesInicioCobro) break;
     }
 
-    meses++;
+    const pagadoEseMes = getPagadoEnMes(cliente, fecha.getMonth(), fecha.getFullYear());
+    const faltante = Math.max((cliente.cuota || 0) - pagadoEseMes, 0);
+
+    if (faltante > 0) {
+      totalVencido += faltante;
+    } else {
+      break;
+    }
   }
 
-  return meses;
-}
-
-function getTotalPagadoCuotas(cliente) {
-  // Suma todos los pagos tipo "cuota" sin importar la fecha en que se registraron,
-  // así un pago tardío o parcial (ej. $50 pagados en julio para la cuota vencida
-  // de junio) sí se descuenta de la mora, en vez de exigir que caiga en el mismo
-  // mes calendario de la cuota que cubre.
-  return (cliente.pagos || [])
-    .filter(p => p.tipo === 'cuota')
-    .reduce((s, p) => s + p.monto, 0);
-}
-
-function getCuotaVencida(cliente) {
-  if (!cliente.cuota || !cliente.diaPago) return 0;
-  if (cliente.estado !== 'activo') return 0;
-  if (getSaldoPendiente(cliente) <= 0) return 0;
-
-  const hoy = new Date();
-  const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
-  if (cliente.mesInicioCobro && mesActual < cliente.mesInicioCobro) return 0;
-
-  const mesesVencidos = getMesesVencidos(cliente);
-  const totalAdeudado = mesesVencidos * cliente.cuota;
-  const totalPagadoCuotas = getTotalPagadoCuotas(cliente);
-
-  return Math.max(totalAdeudado - totalPagadoCuotas, 0);
+  return totalVencido;
 }
 
 function isMora(cliente) {
@@ -2895,7 +2827,32 @@ function isMora(cliente) {
   if (!cliente.diaPago) return false;
   if (getSaldoPendiente(cliente) <= 0) return false;
 
-  return getCuotaVencida(cliente) > 0;
+  const hoy = new Date();
+  const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
+
+  if (cliente.mesInicioCobro && mesActual < cliente.mesInicioCobro) return false;
+
+  // Revisar los últimos 12 meses — si alguno tiene cuota pendiente, está en mora
+  for (let i = 0; i < 12; i++) {
+    const fecha = new Date(hoy.getFullYear(), hoy.getMonth() - i, cliente.diaPago);
+    
+    // Solo contar meses donde ya venció el día de pago
+    if (fecha > hoy) continue;
+
+    // Solo desde el mes de inicio de cobro
+    if (cliente.mesInicioCobro) {
+      const fechaStr = `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,'0')}`;
+      if (fechaStr < cliente.mesInicioCobro) break;
+    }
+
+    const pagadoEseMes = getPagadoEnMes(cliente, fecha.getMonth(), fecha.getFullYear());
+    const cuotaCubierta = pagadoEseMes >= (cliente.cuota || 0);
+
+    if (!cuotaCubierta) return true; // Tiene al menos un mes sin pagar → en mora
+    else break; // Pagó ese mes completo → no seguir revisando hacia atrás
+  }
+
+  return false;
 }
 
 function getEstadoBadge(cliente) {
