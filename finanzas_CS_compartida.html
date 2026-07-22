@@ -1013,6 +1013,9 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2T6q6SkfmpnA55y7BI
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let transactions = [];
 let budgets = JSON.parse(localStorage.getItem('cs_budgets') || '{}');
+let EXPENSE_CATS_LOCAL = JSON.parse(localStorage.getItem('cs_expense_cats') || 'null');
+let INCOME_CATS_LOCAL = JSON.parse(localStorage.getItem('cs_income_cats') || 'null');
+let GRUPOS_LOCAL = JSON.parse(localStorage.getItem('cs_grupos') || 'null');
 let selectedType = 'income';
 let barChartInst, pieChartInst;
 
@@ -1099,33 +1102,58 @@ async function loadData() {
       }
     } catch(e) {}
 
-    // Cargar gastos fijos y configuración
+    // Cargar gastos fijos y configuración - siempre del Sheet
     try {
       const resC = await fetch(`${SCRIPT_URL}?action=getConfig&t=${Date.now()}`);
       const config = await resC.json();
-      if (config && config.budgets) {
-        budgets = config.budgets;
-        localStorage.setItem('cs_budgets', JSON.stringify(budgets));
-      }
-      if (config && config.pct) {
-        localStorage.setItem('cs_pct', JSON.stringify(config.pct));
-      }
-      if (config && config.metas) {
-        metasMensuales = config.metas;
-        localStorage.setItem('cs_metas', JSON.stringify(metasMensuales));
-      }
-      if (config && config.incomeCats && config.incomeCats.length > 0) {
-        INCOME_CATS = config.incomeCats;
-        localStorage.setItem('cs_income_cats', JSON.stringify(INCOME_CATS));
-        updateAllServiceSelects();
-      }
-      if (config && config.expenseCats && config.expenseCats.length > 0) {
-        EXPENSE_CATS = config.expenseCats;
-        localStorage.setItem('cs_expense_cats', JSON.stringify(EXPENSE_CATS));
-        updateAllCatSelects();
-      }
-      if (config && config.grupos) {
-        localStorage.setItem('cs_grupos', JSON.stringify(config.grupos));
+      if (config && config.timestamp) {
+        const localTs = parseInt(localStorage.getItem('cs_config_timestamp') || '0');
+        // Solo aplicar si el Sheet es más reciente o igual
+        if (config.timestamp >= localTs) {
+          if (config.budgets) {
+            budgets = config.budgets;
+            localStorage.setItem('cs_budgets', JSON.stringify(budgets));
+          }
+          if (config.pct) localStorage.setItem('cs_pct', JSON.stringify(config.pct));
+          if (config.metas) {
+            metasMensuales = config.metas;
+            localStorage.setItem('cs_metas', JSON.stringify(metasMensuales));
+          }
+          if (config.incomeCats && config.incomeCats.length > 0) {
+            INCOME_CATS = config.incomeCats;
+            localStorage.setItem('cs_income_cats', JSON.stringify(INCOME_CATS));
+            updateAllServiceSelects();
+          }
+          if (config.expenseCats && config.expenseCats.length > 0) {
+            EXPENSE_CATS = config.expenseCats;
+            localStorage.setItem('cs_expense_cats', JSON.stringify(EXPENSE_CATS));
+            updateAllCatSelects();
+          }
+          if (config.grupos) localStorage.setItem('cs_grupos', JSON.stringify(config.grupos));
+          localStorage.setItem('cs_config_timestamp', config.timestamp);
+        }
+      } else {
+        // Config sin timestamp — aplicar siempre (versión antigua del Sheet)
+        if (config && config.budgets) {
+          budgets = config.budgets;
+          localStorage.setItem('cs_budgets', JSON.stringify(budgets));
+        }
+        if (config && config.pct) localStorage.setItem('cs_pct', JSON.stringify(config.pct));
+        if (config && config.metas) {
+          metasMensuales = config.metas;
+          localStorage.setItem('cs_metas', JSON.stringify(metasMensuales));
+        }
+        if (config && config.incomeCats && config.incomeCats.length > 0) {
+          INCOME_CATS = config.incomeCats;
+          localStorage.setItem('cs_income_cats', JSON.stringify(INCOME_CATS));
+          updateAllServiceSelects();
+        }
+        if (config && config.expenseCats && config.expenseCats.length > 0) {
+          EXPENSE_CATS = config.expenseCats;
+          localStorage.setItem('cs_expense_cats', JSON.stringify(EXPENSE_CATS));
+          updateAllCatSelects();
+        }
+        if (config && config.grupos) localStorage.setItem('cs_grupos', JSON.stringify(config.grupos));
       }
     } catch(e) {}
 
@@ -1248,7 +1276,7 @@ const DEFAULT_EXPENSE_CATS = [
   'Jhonfer','Yamid','Hugo','Alex','Músicos','Practicantes',
   'Arriendo','Servicios','Internet','Aseo',
   'Caja Menor','Ads CS','Ads Clientes','Juanpa y Valen',
-  'Programas','Eps','Diezmo','Ahorro Bóveda','Ahorro Inversión'
+  'Programas','Eps','Ahorro Inversión'
 ];
 
 let EXPENSE_CATS = JSON.parse(localStorage.getItem('cs_expense_cats') || JSON.stringify(DEFAULT_EXPENSE_CATS));
@@ -2093,7 +2121,7 @@ function renderBudget() {
   const empty = document.getElementById('budgetEmpty');
   empty.style.display = 'none';
 
-  const GRUPOS = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || {
+  const GRUPOS = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || window._currentGrupos || {
     'Equipo': {
       cats: ['Jhonfer','Yamid','Hugo','Alex','Músicos','Practicantes','Juanpa y Valen'],
       color: '#22d3ee', bg: 'rgba(34,211,238,0.08)', border: 'rgba(34,211,238,0.3)', label: '👥 Equipo'
@@ -2724,9 +2752,11 @@ function saveClientes() {
 function saveConfig() {
   const pct = JSON.parse(localStorage.getItem('cs_pct') || '{}');
   const grupos = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || window._currentGrupos || {};
+  const timestamp = Date.now();
+  localStorage.setItem('cs_config_timestamp', timestamp);
   fetch(SCRIPT_URL, {
     method: 'POST',
-    body: JSON.stringify({ action: 'saveConfig', budgets, pct, expenseCats: EXPENSE_CATS, grupos, incomeCats: INCOME_CATS, metas: metasMensuales })
+    body: JSON.stringify({ action: 'saveConfig', budgets, pct, expenseCats: EXPENSE_CATS, grupos, incomeCats: INCOME_CATS, metas: metasMensuales, timestamp })
   }).catch(() => {});
 }
 
@@ -3663,15 +3693,7 @@ function deletePago(clienteId, pagoId) {
 document.getElementById('fDate').value = new Date().toISOString().slice(0,10);
 updateAllCatSelects();
 updateAllServiceSelects();
-// Cargar porcentajes guardados
-const savedPct = JSON.parse(localStorage.getItem('cs_pct') || '{}');
-if (savedPct.diezmo && document.getElementById('pctDiezmo')) document.getElementById('pctDiezmo').value = savedPct.diezmo;
-if (savedPct.boveda && document.getElementById('pctBoveda')) document.getElementById('pctBoveda').value = savedPct.boveda;
-const savedInversion = localStorage.getItem('cs_inversion');
-if (savedInversion && document.getElementById('montoInversion')) document.getElementById('montoInversion').value = savedInversion;
 fetchTasa().then(() => loadData());
-// Auto-refresh desactivado en modo prueba - se activa en versión final
-// setInterval(loadData, 60000);
 </script>
 </body>
 </html>
