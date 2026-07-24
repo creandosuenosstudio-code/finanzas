@@ -2069,6 +2069,23 @@ function togglePagadoManual(cat, month) {
   renderBudget();
 }
 
+function toggleNoPagadoManual(cat, month) {
+  // Fuerza el estado "aún no pagado" aunque ya haya una transacción registrada
+  // este mes para esa categoría (caso típico: pagaste tarde y la transacción
+  // del pago de "el mes pasado" quedó fechada dentro de este mes).
+  const noPagadosManual = JSON.parse(localStorage.getItem('cs_no_pagados_manual') || '{}');
+  const key = `${month}_${cat}`;
+  if (noPagadosManual[key]) {
+    delete noPagadosManual[key];
+    showToast(`${cat}: se quitó el aviso de "no pagado"`);
+  } else {
+    noPagadosManual[key] = true;
+    showToast(`⏰ ${cat} marcado como NO pagado este mes — se generará el recordatorio`);
+  }
+  localStorage.setItem('cs_no_pagados_manual', JSON.stringify(noPagadosManual));
+  renderBudget();
+}
+
 function editDiaPago(cat) {
   const diasPago = JSON.parse(localStorage.getItem('cs_dias_pago') || '{}');
   const actual = diasPago[cat];
@@ -2104,6 +2121,7 @@ function renderPagosAlert(month, mb) {
 
   const diasPago = JSON.parse(localStorage.getItem('cs_dias_pago') || '{}');
   const pagadosManual = JSON.parse(localStorage.getItem('cs_pagados_manual') || '{}');
+  const noPagadosManual = JSON.parse(localStorage.getItem('cs_no_pagados_manual') || '{}');
 
   const vencidos = [];
   const proximos = [];
@@ -2116,7 +2134,7 @@ function renderPagosAlert(month, mb) {
     const diaRaw = diasPago[cat];
     const dias = Array.isArray(diaRaw) ? diaRaw : (diaRaw ? [diaRaw] : []);
     const gastado = transactions.filter(t => t.type==='expense' && t.cat===cat && t.date && t.date.startsWith(month)).reduce((s,t)=>s+t.amount,0);
-    const esPagado = gastado >= monto || pagadosManual[`${month}_${cat}`];
+    const esPagado = !noPagadosManual[`${month}_${cat}`] && (gastado >= monto || pagadosManual[`${month}_${cat}`]);
 
     if (esPagado) {
       pagados.push({ cat, monto, gastado });
@@ -2270,7 +2288,11 @@ function renderBudget() {
     const pct = limit > 0 ? (spent/limit)*100 : 0;
     const pctCapped = Math.min(pct, 100);
     const barColor = pct > 100 ? 'var(--red)' : pct >= 100 ? 'var(--green)' : pct > 70 ? 'var(--yellow)' : groupColor;
-    const statusText = pct > 100
+    const noPagadosManualMap = JSON.parse(localStorage.getItem('cs_no_pagados_manual') || '{}');
+    const esNoPagadoManual = noPagadosManualMap[`${month}_${cat}`];
+    const statusText = esNoPagadoManual
+      ? `<span style="color:var(--yellow)">⏰ Marcado como pendiente</span>`
+      : pct > 100
       ? `<span style="color:var(--red)">⚠ Excedido por ${fmt(spent-limit)}</span>`
       : pct >= 100
       ? `<span style="color:var(--green)">✓ Completado</span>`
@@ -2314,9 +2336,13 @@ function renderBudget() {
             <button onclick="togglePagadoManual('${cat}','${month}')" style="font-size:0.7rem;padding:3px 10px;border-radius:20px;border:1px solid ${esPagadoManual ? 'var(--green)' : 'var(--border)'};background:${esPagadoManual ? 'rgba(52,211,153,0.15)' : 'var(--surface2)'};color:${esPagadoManual ? 'var(--green)' : 'var(--muted)'};cursor:pointer;">
               ${esPagadoManual ? '✅ Pagado' : '○ Marcar pagado'}
             </button>
+            ${(limit > 0 && spent >= limit && !esPagadoManual) ? `
+            <button onclick="toggleNoPagadoManual('${cat}','${month}')" title="Usa esto si esta transacción en realidad es el pago atrasado del mes pasado, y este mes todavía no se ha pagado." style="font-size:0.65rem;padding:3px 10px;border-radius:20px;border:1px solid ${esNoPagadoManual ? 'var(--yellow)' : 'var(--border)'};background:${esNoPagadoManual ? 'rgba(251,191,36,0.15)' : 'var(--surface2)'};color:${esNoPagadoManual ? 'var(--yellow)' : 'var(--muted)'};cursor:pointer;">
+              ${esNoPagadoManual ? '⏰ No pagado' : '○ Aún no pagado'}
+            </button>` : ''}
           </div>
         </div>
-        <div class="progress-bar"><div class="progress-fill" style="width:${esPagadoManual ? 100 : pctCapped}%;background:${esPagadoManual ? 'var(--green)' : barColor}"></div></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${esPagadoManual ? 100 : pctCapped}%;background:${esPagadoManual ? 'var(--green)' : (esNoPagadoManual ? 'var(--yellow)' : barColor)}"></div></div>
         <div style="font-size:0.75rem;color:var(--muted);margin-top:8px;display:flex;justify-content:space-between">
           <span>${limit > 0 ? pct.toFixed(0)+'% usado' : 'Gastado: '+fmt(spent)}</span>
           <span>${esPagadoManual ? '<span style="color:var(--green)">✓ Marcado como pagado</span>' : (limit > 0 ? statusText : '—')}</span>
