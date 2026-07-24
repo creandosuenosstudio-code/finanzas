@@ -522,19 +522,26 @@
       </div>
     </div>
 
+    <!-- PANEL DE RECORDATORIOS DE PAGOS -->
+    <div id="pagosAlertPanel" style="margin-bottom:20px;"></div>
+
     <div style="display:flex; gap:16px; margin-bottom:24px; flex-wrap:wrap; align-items:flex-start;">
 
     <div class="card" style="max-width: 480px; flex:1; min-width:280px;">
       <div class="card-title">AGREGAR GASTO FIJO</div>
       <div style="display:flex; gap: 10px; flex-wrap:wrap; align-items:flex-end;">
-        <div style="flex:1; min-width:160px;">
+        <div style="flex:2; min-width:160px;">
           <label>Categoría</label>
           <select id="bCat" onchange="onBudgetCatChange()">
           </select>
         </div>
-        <div style="flex:1; min-width:120px;">
+        <div style="flex:1; min-width:100px;">
           <label>Monto (COP)</label>
           <input type="number" id="bAmount" placeholder="0" min="0">
+        </div>
+        <div style="flex:1; min-width:80px;">
+          <label>Día de pago</label>
+          <input type="number" id="bDiaPago" placeholder="Ej: 5" min="1" max="31" style="text-align:center;">
         </div>
         <button class="btn-primary" style="width:auto; padding: 11px 20px; margin-top:0;" onclick="addBudget()">Agregar</button>
       </div>
@@ -2048,16 +2055,130 @@ function renderVariables() {
   saveConfig();
 }
 
+function editDiaPago(cat) {
+  const diasPago = JSON.parse(localStorage.getItem('cs_dias_pago') || '{}');
+  const actual = diasPago[cat] || '';
+  const nuevo = prompt(`¿Qué día del mes se paga "${cat}"?\n(Escribe un número del 1 al 31)`, actual);
+  if (nuevo === null) return;
+  const dia = parseInt(nuevo);
+  if (dia >= 1 && dia <= 31) {
+    diasPago[cat] = dia;
+    localStorage.setItem('cs_dias_pago', JSON.stringify(diasPago));
+    renderBudget();
+    showToast(`✓ Día de pago de ${cat} guardado: día ${dia}`);
+  } else if (nuevo === '') {
+    delete diasPago[cat];
+    localStorage.setItem('cs_dias_pago', JSON.stringify(diasPago));
+    renderBudget();
+  } else {
+    showToast('Número inválido. Escribe un número del 1 al 31.', 'error');
+  }
+}
+
+function renderPagosAlert(month, mb) {
+  const el = document.getElementById('pagosAlertPanel');
+  if (!el) return;
+  const hoy = new Date();
+  const esEsteMes = month === currentMonth();
+
+  // Obtener días de pago guardados
+  const diasPago = JSON.parse(localStorage.getItem('cs_dias_pago') || '{}');
+
+  const vencidos = [];
+  const proximos = [];
+  const pagados = [];
+
+  Object.keys(mb).forEach(cat => {
+    if (cat === '_programas') return;
+    const monto = mb[cat];
+    if (!monto) return;
+    const dia = diasPago[cat];
+    const gastado = transactions.filter(t => t.type==='expense' && t.cat===cat && t.date && t.date.startsWith(month)).reduce((s,t)=>s+t.amount,0);
+    const esPagado = gastado >= monto;
+
+    if (esPagado) {
+      pagados.push({ cat, monto, gastado });
+    } else if (dia && esEsteMes) {
+      const fechaPago = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
+      const diasRestantes = Math.ceil((fechaPago - hoy) / (1000*60*60*24));
+      if (diasRestantes < 0) {
+        vencidos.push({ cat, monto, gastado, dia, diasVencido: Math.abs(diasRestantes) });
+      } else if (diasRestantes <= 7) {
+        proximos.push({ cat, monto, gastado, dia, diasRestantes });
+      }
+    }
+  });
+
+  if (!vencidos.length && !proximos.length) {
+    el.innerHTML = pagados.length ? `
+      <div style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+        <span style="font-size:1.3rem;">✅</span>
+        <div>
+          <div style="font-weight:600;font-size:0.88rem;color:var(--green);">¡Todo al día!</div>
+          <div style="font-size:0.75rem;color:var(--muted);">${pagados.length} pagos completados este mes</div>
+        </div>
+      </div>` : '';
+    return;
+  }
+
+  let html = '';
+
+  if (vencidos.length) {
+    html += `<div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.3);border-radius:12px;padding:16px;margin-bottom:12px;">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">🔴 PAGOS VENCIDOS — ¡Urgente!</div>
+      ${vencidos.map(p => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(248,113,113,0.15);">
+          <div>
+            <div style="font-weight:600;font-size:0.88rem;">${p.cat}</div>
+            <div style="font-size:0.72rem;color:var(--red);">Venció el día ${p.dia} — hace ${p.diasVencido} día${p.diasVencido>1?'s':''}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-weight:700;color:var(--red);font-size:0.88rem;">${fmt(p.monto)}</div>
+            ${p.gastado > 0 ? `<div style="font-size:0.7rem;color:var(--muted);">Pagado: ${fmt(p.gastado)}</div>` : ''}
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+  }
+
+  if (proximos.length) {
+    html += `<div style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.3);border-radius:12px;padding:16px;margin-bottom:12px;">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--yellow);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">⏰ PRÓXIMOS 7 DÍAS</div>
+      ${proximos.map(p => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(251,191,36,0.15);">
+          <div>
+            <div style="font-weight:600;font-size:0.88rem;">${p.cat}</div>
+            <div style="font-size:0.72rem;color:var(--yellow);">${p.diasRestantes === 0 ? '¡Hoy!' : `En ${p.diasRestantes} día${p.diasRestantes>1?'s':''} — día ${p.dia}`}</div>
+          </div>
+          <div style="font-weight:700;color:var(--yellow);font-size:0.88rem;">${fmt(p.monto)}</div>
+        </div>
+      `).join('')}
+    </div>`;
+  }
+
+  el.innerHTML = html;
+}
+
 function addBudget() {
   const cat = document.getElementById('bCat').value;
   const amount = parseFloat(document.getElementById('bAmount').value);
+  const diaPago = parseInt(document.getElementById('bDiaPago').value) || 0;
   const month = document.getElementById('budgetMonth').value || currentMonth();
   if (!amount) { showToast('Ingresa un monto.', 'error'); return; }
   if (!budgets[month]) budgets[month] = {};
   budgets[month][cat] = amount;
+
+  // Guardar día de pago
+  if (diaPago) {
+    const diasPago = JSON.parse(localStorage.getItem('cs_dias_pago') || '{}');
+    diasPago[cat] = diaPago;
+    localStorage.setItem('cs_dias_pago', JSON.stringify(diasPago));
+  }
+
   saveBudgets();
   renderBudget();
   document.getElementById('bAmount').value = '';
+  document.getElementById('bDiaPago').value = '';
   showToast('Gasto fijo guardado.');
 }
 
@@ -2090,6 +2211,7 @@ function onBudgetMonthChange() {
 function renderBudget() {
   const month = document.getElementById('budgetMonth')?.value || currentMonth();
   const mb = budgets[month] || {};
+  const diasPago = JSON.parse(localStorage.getItem('cs_dias_pago') || '{}');
   const grid = document.getElementById('budgetGrid');
   const empty = document.getElementById('budgetEmpty');
   empty.style.display = 'none';
@@ -2148,7 +2270,10 @@ function renderBudget() {
     return `
       <div class="budget-item" style="border-color:${groupColor}22;">
         <div class="budget-header">
-          <div class="budget-cat" style="color:${groupColor}">${cat}</div>
+          <div>
+            <div class="budget-cat" style="color:${groupColor}">${cat}</div>
+            ${diasPago[cat] ? `<div style="font-size:0.7rem;color:var(--muted);margin-top:2px;">📅 Día ${diasPago[cat]} de cada mes</div>` : `<div style="font-size:0.7rem;color:var(--muted);margin-top:2px;cursor:pointer;" onclick="editDiaPago('${cat}')">+ Agregar día de pago</div>`}
+          </div>
           <div class="budget-amounts">
             <div style="color:var(--text);font-weight:600">${fmt(spent)}</div>
             <div>${limit > 0 ? 'de '+fmt(limit) : '<span style="color:var(--muted);font-style:italic">sin presupuesto</span>'}</div>
@@ -2175,6 +2300,7 @@ function renderBudget() {
   document.getElementById('summaryTotal').textContent = fmt(totalPresupuesto);
   document.getElementById('summarySpent').textContent = fmt(totalGastado);
   document.getElementById('summaryNeeded').textContent = fmt(Math.max(totalPresupuesto - totalGastado, 0));
+  renderPagosAlert(month, mb);
 
   let html = '';
   for (const [grupo, cfg] of Object.entries(GRUPOS)) {
