@@ -635,6 +635,7 @@
         <option value="activo">Activo</option>
         <option value="pausado">Pausado</option>
         <option value="terminado">Terminado</option>
+        <option value="cancelado">Cancelado</option>
       </select>
       <select id="filterPais" onchange="renderClientes()" style="flex:1;min-width:130px;">
         <option value="">🌎 Todos los países</option>
@@ -858,6 +859,7 @@
               <option value="activo">Activo</option>
               <option value="pausado">Pausado</option>
               <option value="terminado">Terminado</option>
+              <option value="cancelado">Cancelado</option>
             </select>
           </div>
           <div class="form-group">
@@ -3194,6 +3196,7 @@ function isMora(cliente) {
 
 function getEstadoBadge(cliente) {
   if (cliente.estado === 'terminado') return `<span class="badge" style="background:rgba(136,136,160,0.15);color:var(--muted);">Terminado</span>`;
+  if (cliente.estado === 'cancelado') return `<span class="badge" style="background:rgba(136,136,160,0.15);color:var(--muted);">Cancelado</span>`;
   if (cliente.estado === 'pausado') return `<span class="badge" style="background:rgba(251,191,36,0.15);color:var(--yellow);">Pausado</span>`;
   if (getSaldoPendiente(cliente) === 0) return `<span class="badge income">✓ Saldado</span>`;
   if (isMora(cliente)) return `<span class="badge expense">⚠ En mora · ${fmt(getCuotaVencida(cliente), cliente.moneda)}</span>`;
@@ -3250,7 +3253,7 @@ function renderClientes() {
       (filterPago === 'mora' && isMora(c)) ||
       (filterPago === 'aldia' && !isMora(c) && getSaldoPendiente(c) > 0 && c.estado === 'activo') ||
       (filterPago === 'saldado' && c.estado === 'activo' && getSaldoPendiente(c) <= 0);
-    const matchEstado = !filterEstado || c.estado === filterEstado;
+    const matchEstado = !filterEstado || c.estado === filterEstado || (filterEstado === 'terminado' && c.estado === 'cancelado');
     const matchPais = !filterPais || c.pais === filterPais;
     return matchSearch && matchPago && matchEstado && matchPais;
   });
@@ -3260,7 +3263,7 @@ function renderClientes() {
   const numSaldado = clientes.filter(c => c.estado === 'activo' && getSaldoPendiente(c) <= 0).length;
   const numMora = clientes.filter(c => isMora(c)).length;
   const numPausa = clientes.filter(c => c.estado === 'pausado').length;
-  const numTerminados = clientes.filter(c => c.estado === 'terminado').length;
+  const numTerminados = clientes.filter(c => c.estado === 'terminado' || c.estado === 'cancelado').length;
   const carteraActiva = numAlDia + numSaldado + numMora + numPausa; // todos menos terminados
   const pct = n => carteraActiva > 0 ? `${((n/carteraActiva)*100).toFixed(0)}%` : '0%';
   document.getElementById('statAlDia').textContent = numAlDia;
