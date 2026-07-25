@@ -627,6 +627,7 @@
       <select id="filterEstadoPago" onchange="renderClientes()" style="flex:1;min-width:130px;">
         <option value="">💳 Todos los pagos</option>
         <option value="aldia">Al día</option>
+        <option value="saldado">Pagado en su totalidad</option>
         <option value="mora">En mora</option>
       </select>
       <select id="filterEstadoCliente" onchange="renderClientes()" style="flex:1;min-width:140px;">
@@ -643,27 +644,27 @@
 
     <!-- STATS RÁPIDOS -->
     <div class="kpi-row" style="margin-bottom:16px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
-      <div class="kpi">
+      <div class="kpi" onclick="filtrarPorKpi('aldia')" style="cursor:pointer;" title="Ver solo clientes al día">
         <div class="kpi-label">Al día</div>
         <div class="kpi-value green" id="statAlDia">0</div>
         <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;" id="statAlDiaPct">0%</div>
       </div>
-      <div class="kpi">
+      <div class="kpi" onclick="filtrarPorKpi('saldado')" style="cursor:pointer;" title="Ver solo clientes pagados en su totalidad">
         <div class="kpi-label">Pagado en su totalidad</div>
         <div class="kpi-value" style="color:var(--accent2);" id="statSaldado">0</div>
         <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;" id="statSaldadoPct">0%</div>
       </div>
-      <div class="kpi">
+      <div class="kpi" onclick="filtrarPorKpi('mora')" style="cursor:pointer;" title="Ver solo clientes en mora">
         <div class="kpi-label">En mora</div>
         <div class="kpi-value red" id="statMora">0</div>
         <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;" id="statMoraPct">0%</div>
       </div>
-      <div class="kpi">
+      <div class="kpi" onclick="filtrarPorKpi('pausa')" style="cursor:pointer;" title="Ver solo clientes en pausa">
         <div class="kpi-label">En pausa</div>
         <div class="kpi-value yellow" id="statPausa">0</div>
         <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;" id="statPausaPct">0%</div>
       </div>
-      <div class="kpi">
+      <div class="kpi" onclick="filtrarPorKpi('terminado')" style="cursor:pointer;" title="Ver solo clientes terminados o cancelados">
         <div class="kpi-label">Terminados o cancelados</div>
         <div class="kpi-value" style="color:var(--muted);" id="statTerminados">0</div>
       </div>
@@ -3211,6 +3212,18 @@ function getEstadoLabel(estado) {
   return map[estado] || estado;
 }
 
+function filtrarPorKpi(tipo) {
+  const selPago = document.getElementById('filterEstadoPago');
+  const selEstado = document.getElementById('filterEstadoCliente');
+  if (tipo === 'aldia') { selPago.value = 'aldia'; selEstado.value = ''; }
+  else if (tipo === 'saldado') { selPago.value = 'saldado'; selEstado.value = ''; }
+  else if (tipo === 'mora') { selPago.value = 'mora'; selEstado.value = ''; }
+  else if (tipo === 'pausa') { selPago.value = ''; selEstado.value = 'pausado'; }
+  else if (tipo === 'terminado') { selPago.value = ''; selEstado.value = 'terminado'; }
+  renderClientes();
+  document.getElementById('clientesList')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function renderClientes() {
   const search = document.getElementById('clienteSearch')?.value.toLowerCase() || '';
   const filterPago = document.getElementById('filterEstadoPago')?.value || '';
@@ -3235,7 +3248,8 @@ function renderClientes() {
       (c.identificacion||'').toLowerCase().includes(search);
     const matchPago = !filterPago ||
       (filterPago === 'mora' && isMora(c)) ||
-      (filterPago === 'aldia' && !isMora(c) && getSaldoPendiente(c) > 0 && c.estado === 'activo');
+      (filterPago === 'aldia' && !isMora(c) && getSaldoPendiente(c) > 0 && c.estado === 'activo') ||
+      (filterPago === 'saldado' && c.estado === 'activo' && getSaldoPendiente(c) <= 0);
     const matchEstado = !filterEstado || c.estado === filterEstado;
     const matchPais = !filterPais || c.pais === filterPais;
     return matchSearch && matchPago && matchEstado && matchPais;
