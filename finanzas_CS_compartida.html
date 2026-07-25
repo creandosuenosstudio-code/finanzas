@@ -2143,6 +2143,7 @@ function renderPagosAlert(month, mb) {
   const noPagadosManual = JSON.parse(localStorage.getItem('cs_no_pagados_manual') || '{}');
 
   const vencidos = [];
+  const hoyPagos = [];
   const proximos = [];
   const pagados = [];
 
@@ -2165,6 +2166,8 @@ function renderPagosAlert(month, mb) {
         const diasRestantes = Math.ceil((fechaPago - hoy) / (1000*60*60*24));
         if (diasRestantes < 0) {
           vencidos.push({ cat, monto, gastado, dia, diasVencido: Math.abs(diasRestantes) });
+        } else if (diasRestantes === 0) {
+          hoyPagos.push({ cat, monto, gastado, dia });
         } else if (diasRestantes <= 7) {
           proximos.push({ cat, monto, gastado, dia, diasRestantes });
         }
@@ -2172,7 +2175,7 @@ function renderPagosAlert(month, mb) {
     }
   });
 
-  if (!vencidos.length && !proximos.length) {
+  if (!vencidos.length && !hoyPagos.length && !proximos.length) {
     el.innerHTML = pagados.length ? `
       <div style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
         <span style="font-size:1.3rem;">✅</span>
@@ -2204,6 +2207,24 @@ function renderPagosAlert(month, mb) {
     </div>`;
   }
 
+  if (hoyPagos.length) {
+    html += `<div style="background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.35);border-radius:12px;padding:16px;margin-bottom:12px;">
+      <div style="font-size:0.78rem;font-weight:700;color:#fb923c;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">🟠 PAGAR HOY</div>
+      ${hoyPagos.map(p => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(251,146,60,0.18);">
+          <div>
+            <div style="font-weight:600;font-size:0.88rem;">${p.cat}</div>
+            <div style="font-size:0.72rem;color:#fb923c;">Vence hoy — día ${p.dia}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-weight:700;color:#fb923c;font-size:0.88rem;">${fmt(Math.max(p.monto - p.gastado, 0))}</div>
+            ${p.gastado > 0 ? `<div style="font-size:0.7rem;color:var(--muted);">de ${fmt(p.monto)} · abonado ${fmt(p.gastado)}</div>` : ''}
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+  }
+
   if (proximos.length) {
     html += `<div style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.3);border-radius:12px;padding:16px;margin-bottom:12px;">
       <div style="font-size:0.78rem;font-weight:700;color:var(--yellow);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">⏰ PRÓXIMOS 7 DÍAS</div>
@@ -2211,7 +2232,7 @@ function renderPagosAlert(month, mb) {
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(251,191,36,0.15);">
           <div>
             <div style="font-weight:600;font-size:0.88rem;">${p.cat}</div>
-            <div style="font-size:0.72rem;color:var(--yellow);">${p.diasRestantes === 0 ? '¡Hoy!' : `En ${p.diasRestantes} día${p.diasRestantes>1?'s':''} — día ${p.dia}`}</div>
+            <div style="font-size:0.72rem;color:var(--yellow);">En ${p.diasRestantes} día${p.diasRestantes>1?'s':''} — día ${p.dia}</div>
           </div>
           <div style="text-align:right;">
             <div style="font-weight:700;color:var(--yellow);font-size:0.88rem;">${fmt(Math.max(p.monto - p.gastado, 0))}</div>
