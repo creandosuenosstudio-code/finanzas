@@ -2155,10 +2155,6 @@ function renderPagosAlert(month, mb) {
     const gastado = transactions.filter(t => t.type==='expense' && t.cat===cat && t.date && t.date.startsWith(month)).reduce((s,t)=>s+t.amount,0);
     const forzadoPendiente = !!noPagadosManual[`${month}_${cat}`];
     const esPagado = !forzadoPendiente && (gastado >= monto || pagadosManual[`${month}_${cat}`]);
-    // Si está forzado como "no pagado" pero en realidad ya no queda saldo pendiente
-    // este mes, lo marcamos para avisarle al usuario (puede ser un toggle que quedó
-    // activo sin querer, o el caso real de un pago tardío del mes anterior).
-    const yaSaldadoPeroForzado = forzadoPendiente && (monto - gastado) <= 0;
 
     if (esPagado) {
       pagados.push({ cat, monto, gastado });
@@ -2168,9 +2164,9 @@ function renderPagosAlert(month, mb) {
         const fechaPago = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
         const diasRestantes = Math.ceil((fechaPago - hoy) / (1000*60*60*24));
         if (diasRestantes < 0) {
-          vencidos.push({ cat, monto, gastado, dia, diasVencido: Math.abs(diasRestantes), yaSaldadoPeroForzado });
+          vencidos.push({ cat, monto, gastado, dia, diasVencido: Math.abs(diasRestantes) });
         } else if (diasRestantes <= 7) {
-          proximos.push({ cat, monto, gastado, dia, diasRestantes, yaSaldadoPeroForzado });
+          proximos.push({ cat, monto, gastado, dia, diasRestantes });
         }
       });
     }
@@ -2198,10 +2194,9 @@ function renderPagosAlert(month, mb) {
           <div>
             <div style="font-weight:600;font-size:0.88rem;">${p.cat}</div>
             <div style="font-size:0.72rem;color:var(--red);">Venció el día ${p.dia} — hace ${p.diasVencido} día${p.diasVencido>1?'s':''}</div>
-            ${p.yaSaldadoPeroForzado ? `<div style="font-size:0.68rem;color:var(--accent2);margin-top:2px;cursor:pointer;" onclick="togglePagadoManual('${p.cat}','${month}');toggleNoPagadoManual('${p.cat}','${month}')" title="Este mes ya no debe nada, pero está marcado manualmente como pendiente. Clic para quitar la marca.">🔵 Marcado manual — ya está saldado, clic para quitar</div>` : ''}
           </div>
           <div style="text-align:right;">
-            <div style="font-weight:700;color:var(--red);font-size:0.88rem;">${fmt(p.monto - p.gastado)}</div>
+            <div style="font-weight:700;color:var(--red);font-size:0.88rem;">${fmt(Math.max(p.monto - p.gastado, 0))}</div>
             ${p.gastado > 0 ? `<div style="font-size:0.7rem;color:var(--muted);">de ${fmt(p.monto)} · abonado ${fmt(p.gastado)}</div>` : ''}
           </div>
         </div>
@@ -2217,10 +2212,9 @@ function renderPagosAlert(month, mb) {
           <div>
             <div style="font-weight:600;font-size:0.88rem;">${p.cat}</div>
             <div style="font-size:0.72rem;color:var(--yellow);">${p.diasRestantes === 0 ? '¡Hoy!' : `En ${p.diasRestantes} día${p.diasRestantes>1?'s':''} — día ${p.dia}`}</div>
-            ${p.yaSaldadoPeroForzado ? `<div style="font-size:0.68rem;color:var(--accent2);margin-top:2px;cursor:pointer;" onclick="togglePagadoManual('${p.cat}','${month}');toggleNoPagadoManual('${p.cat}','${month}')" title="Este mes ya no debe nada, pero está marcado manualmente como pendiente. Clic para quitar la marca.">🔵 Marcado manual — ya está saldado, clic para quitar</div>` : ''}
           </div>
           <div style="text-align:right;">
-            <div style="font-weight:700;color:var(--yellow);font-size:0.88rem;">${fmt(p.monto - p.gastado)}</div>
+            <div style="font-weight:700;color:var(--yellow);font-size:0.88rem;">${fmt(Math.max(p.monto - p.gastado, 0))}</div>
             ${p.gastado > 0 ? `<div style="font-size:0.68rem;color:var(--muted);">de ${fmt(p.monto)} · abonado ${fmt(p.gastado)}</div>` : ''}
           </div>
         </div>
