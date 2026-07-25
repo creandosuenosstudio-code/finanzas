@@ -99,6 +99,7 @@
   .kpi-value.yellow { color: var(--yellow); }
   .kpi-value.red { color: var(--red); }
   .kpi-value.purple { color: var(--accent2); }
+  .kpi-value.green { color: var(--green); }
   .kpi-sub { font-size: 0.78rem; color: var(--muted); margin-top: 8px; }
 
   .charts-row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; margin-bottom: 28px; }
@@ -641,19 +642,35 @@
     </div>
 
     <!-- STATS RÁPIDOS -->
-    <div class="kpi-row" style="margin-bottom:24px;grid-template-columns:repeat(4,1fr);">
+    <div class="kpi-row" style="margin-bottom:16px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
       <div class="kpi">
-        <div class="kpi-label">Clientes activos</div>
-        <div class="kpi-value purple" id="statActivos">0</div>
+        <div class="kpi-label">Al día</div>
+        <div class="kpi-value green" id="statAlDia">0</div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;" id="statAlDiaPct">0%</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Pagado en su totalidad</div>
+        <div class="kpi-value" style="color:var(--accent2);" id="statSaldado">0</div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;" id="statSaldadoPct">0%</div>
       </div>
       <div class="kpi">
         <div class="kpi-label">En mora</div>
         <div class="kpi-value red" id="statMora">0</div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;" id="statMoraPct">0%</div>
       </div>
       <div class="kpi">
         <div class="kpi-label">En pausa</div>
         <div class="kpi-value yellow" id="statPausa">0</div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;" id="statPausaPct">0%</div>
       </div>
+      <div class="kpi">
+        <div class="kpi-label">Terminados o cancelados</div>
+        <div class="kpi-value" style="color:var(--muted);" id="statTerminados">0</div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">fuera de la cartera activa</div>
+      </div>
+    </div>
+
+    <div class="kpi-row" style="margin-bottom:24px;grid-template-columns:1fr;">
       <div class="kpi">
         <div class="kpi-label">En mora — cuotas vencidas</div>
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">
@@ -3226,9 +3243,22 @@ function renderClientes() {
   });
 
   // Stats
-  document.getElementById('statActivos').textContent = clientes.filter(c => c.estado === 'activo').length;
-  document.getElementById('statMora').textContent = clientes.filter(c => isMora(c)).length;
-  document.getElementById('statPausa').textContent = clientes.filter(c => c.estado === 'pausado').length;
+  const numAlDia = clientes.filter(c => c.estado === 'activo' && !isMora(c) && getSaldoPendiente(c) > 0).length;
+  const numSaldado = clientes.filter(c => c.estado === 'activo' && getSaldoPendiente(c) <= 0).length;
+  const numMora = clientes.filter(c => isMora(c)).length;
+  const numPausa = clientes.filter(c => c.estado === 'pausado').length;
+  const numTerminados = clientes.filter(c => c.estado === 'terminado').length;
+  const carteraActiva = numAlDia + numSaldado + numMora + numPausa; // todos menos terminados
+  const pct = n => carteraActiva > 0 ? `${((n/carteraActiva)*100).toFixed(0)}%` : '0%';
+  document.getElementById('statAlDia').textContent = numAlDia;
+  document.getElementById('statAlDiaPct').textContent = pct(numAlDia);
+  document.getElementById('statSaldado').textContent = numSaldado;
+  document.getElementById('statSaldadoPct').textContent = pct(numSaldado);
+  document.getElementById('statMora').textContent = numMora;
+  document.getElementById('statMoraPct').textContent = pct(numMora);
+  document.getElementById('statPausa').textContent = numPausa;
+  document.getElementById('statPausaPct').textContent = pct(numPausa);
+  document.getElementById('statTerminados').textContent = numTerminados;
   // Cartera = solo cuotas vencidas de clientes en mora
   const carteraCOP = clientes.filter(c => (c.moneda||'COP')==='COP').reduce((s,c) => s + getCuotaVencida(c), 0);
   const carteraUSD = clientes.filter(c => c.moneda==='USD').reduce((s,c) => s + getCuotaVencida(c), 0);
