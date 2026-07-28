@@ -1133,7 +1133,7 @@ async function loadData() {
       const resC = await fetch(`${SCRIPT_URL}?action=getConfig&t=${Date.now()}`);
       const config = await resC.json();
       if (config) {
-        if (config.budgets) {
+        if (config.budgets && Object.keys(config.budgets).length > 0) {
           budgets = config.budgets;
           localStorage.setItem('cs_budgets', JSON.stringify(budgets));
         }
@@ -2949,7 +2949,12 @@ function saveClientes() {
   fetch(SCRIPT_URL, {
     method: 'POST',
     body: JSON.stringify({ action: 'saveArtistas', artistas: clientes })
-  }).catch(() => {});
+  }).then(res => {
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+  }).catch(err => {
+    console.error('Error guardando artistas en el servidor:', err);
+    showToast('⚠️ No se pudo guardar en el servidor — revisa tu conexión y vuelve a intentarlo, o el cambio se puede perder.', 'error');
+  });
 }
 
 function saveConfig() {
@@ -2961,7 +2966,12 @@ function saveConfig() {
   fetch(SCRIPT_URL, {
     method: 'POST',
     body: JSON.stringify({ action: 'saveConfig', pct, expenseCats: EXPENSE_CATS, grupos, incomeCats: INCOME_CATS, metas: metasMensuales, timestamp })
-  }).catch(() => {});
+  }).then(res => {
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+  }).catch(err => {
+    console.error('Error guardando configuración en el servidor:', err);
+    showToast('⚠️ No se pudo guardar en el servidor — revisa tu conexión y vuelve a intentarlo, o el cambio se puede perder.', 'error');
+  });
 }
 
 function saveBudgets() {
@@ -2971,7 +2981,12 @@ function saveBudgets() {
   fetch(SCRIPT_URL, {
     method: 'POST',
     body: JSON.stringify({ action: 'saveBudgets', budgets, timestamp })
-  }).catch(() => {});
+  }).then(res => {
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+  }).catch(err => {
+    console.error('Error guardando gastos fijos en el servidor:', err);
+    showToast('⚠️ No se pudo guardar en el servidor — revisa tu conexión y vuelve a intentarlo, o el cambio se puede perder.', 'error');
+  });
 }
 
 function fmtInput(input) {
