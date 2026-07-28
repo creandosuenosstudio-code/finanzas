@@ -2205,6 +2205,27 @@ function renderPagosAlert(month, mb) {
     }
   });
 
+  // Arrastrar gastos fijos de meses anteriores que quedaron sin pagar —
+  // se siguen mostrando como vencidos hasta que se marquen como pagados,
+  // sin importar que ya haya cambiado el mes.
+  if (esEsteMes) {
+    const mesesAnteriores = Object.keys(budgets).filter(m => m < month);
+    mesesAnteriores.forEach(mAnt => {
+      const mbAnt = budgets[mAnt] || {};
+      Object.keys(mbAnt).forEach(cat => {
+        if (cat === '_programas') return;
+        const montoAnt = mbAnt[cat];
+        if (!montoAnt) return;
+        const gastadoAnt = transactions.filter(t => t.type==='expense' && t.cat===cat && t.date && t.date.startsWith(mAnt)).reduce((s,t)=>s+t.amount,0);
+        const forzadoAnt = !!noPagadosManual[`${mAnt}_${cat}`];
+        const esPagadoAnt = !forzadoAnt && (gastadoAnt >= montoAnt || pagadosManual[`${mAnt}_${cat}`]);
+        if (!esPagadoAnt) {
+          vencidos.push({ cat, monto: montoAnt, gastado: gastadoAnt, mesLabel: formatMonthLabel(mAnt), mesKey: mAnt });
+        }
+      });
+    });
+  }
+
   if (!vencidos.length && !hoyPagos.length && !proximos.length) {
     el.innerHTML = pagados.length ? `
       <div style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
@@ -2226,7 +2247,8 @@ function renderPagosAlert(month, mb) {
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(248,113,113,0.15);">
           <div>
             <div style="font-weight:600;font-size:0.88rem;">${p.cat}</div>
-            <div style="font-size:0.72rem;color:var(--red);">Venció el día ${p.dia} — hace ${p.diasVencido} día${p.diasVencido>1?'s':''}</div>
+            <div style="font-size:0.72rem;color:var(--red);">${p.mesLabel ? `Pendiente desde ${p.mesLabel}` : `Venció el día ${p.dia} — hace ${p.diasVencido} día${p.diasVencido>1?'s':''}`}</div>
+            ${p.mesLabel ? `<button onclick="togglePagadoManual('${p.cat}','${p.mesKey}')" style="margin-top:4px;font-size:0.68rem;padding:2px 8px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;">○ Marcar pagado (${p.mesLabel})</button>` : ''}
           </div>
           <div style="text-align:right;">
             <div style="font-weight:700;color:var(--red);font-size:0.88rem;">${fmt(Math.max(p.monto - p.gastado, 0))}</div>
