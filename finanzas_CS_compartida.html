@@ -1008,6 +1008,26 @@
       </div>
     </div>
 
+    <!-- ROAS / INVERSIÓN EN PUBLICIDAD -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-title">📈 ROAS — RETORNO DE INVERSIÓN EN PUBLICIDAD</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:16px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Inversión en Ads (COP)</label>
+          <input type="text" id="roasInversion" placeholder="0" oninput="fmtInput(this);onRoasInput()" inputmode="numeric">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Ventas por pauta</label>
+          <input type="text" id="roasVentasPauta" placeholder="0" oninput="fmtInput(this);onRoasInput()" inputmode="numeric">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Ventas nuevas sin pauta</label>
+          <input type="text" id="roasVentasSinPauta" placeholder="0" oninput="fmtInput(this);onRoasInput()" inputmode="numeric">
+        </div>
+      </div>
+      <div id="roasResumen"></div>
+    </div>
+
     <!-- REPORTE DE CIERRE MENSUAL -->
     <div class="card" style="margin-bottom:20px;">
       <div class="card-title">📅 CIERRE DEL MES</div>
@@ -1159,6 +1179,10 @@ async function loadData(intento = 1) {
         if (config.diasPago) localStorage.setItem('cs_dias_pago', JSON.stringify(config.diasPago));
         if (config.pagadosManual) localStorage.setItem('cs_pagados_manual', JSON.stringify(config.pagadosManual));
         if (config.noPagadosManual) localStorage.setItem('cs_no_pagados_manual', JSON.stringify(config.noPagadosManual));
+        if (config.roas) {
+          roasMensual = config.roas;
+          localStorage.setItem('cs_roas', JSON.stringify(roasMensual));
+        }
       }
     } catch(e) {}
 
@@ -2781,6 +2805,7 @@ function convertirACOP(amount, currency) {
 
 // ─── REPORTES ─────────────────────────────────────────────────────────────────
 let metasMensuales = JSON.parse(localStorage.getItem('cs_metas') || '{}');
+let roasMensual = JSON.parse(localStorage.getItem('cs_roas') || '{}');
 
 function saveMetaMensual() {
   const mes = document.getElementById('reportesMes')?.value || currentMonth();
@@ -2789,6 +2814,60 @@ function saveMetaMensual() {
   localStorage.setItem('cs_metas', JSON.stringify(metasMensuales));
   saveConfig(); // Guardar en Sheet
   renderMetaBar(mes);
+}
+
+function saveRoasMensual() {
+  const mes = document.getElementById('reportesMes')?.value || currentMonth();
+  roasMensual[mes] = {
+    inversion: parseAmt('roasInversion'),
+    ventasPauta: parseAmt('roasVentasPauta'),
+    ventasSinPauta: parseAmt('roasVentasSinPauta')
+  };
+  localStorage.setItem('cs_roas', JSON.stringify(roasMensual));
+  saveConfig(); // Guardar en Sheet
+}
+
+function onRoasInput() {
+  saveRoasMensual();
+  renderRoasResumen();
+}
+
+function renderRoas(mes) {
+  mes = mes || document.getElementById('reportesMes')?.value || currentMonth();
+  const d = roasMensual[mes] || { inversion: 0, ventasPauta: 0, ventasSinPauta: 0 };
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ? new Intl.NumberFormat('es-CO').format(v) : ''; };
+  setVal('roasInversion', d.inversion);
+  setVal('roasVentasPauta', d.ventasPauta);
+  setVal('roasVentasSinPauta', d.ventasSinPauta);
+  renderRoasResumen(mes);
+}
+
+function renderRoasResumen(mes) {
+  mes = mes || document.getElementById('reportesMes')?.value || currentMonth();
+  const d = roasMensual[mes] || { inversion: 0, ventasPauta: 0, ventasSinPauta: 0 };
+  const totalVentasNuevas = d.ventasPauta + d.ventasSinPauta;
+  const roas = d.inversion > 0 ? (d.ventasPauta / d.inversion) : 0;
+  const el = document.getElementById('roasResumen');
+  if (!el) return;
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding-top:8px;border-top:1px solid var(--border);">
+      <div>
+        <div style="font-size:0.72rem;color:var(--muted);">ROAS</div>
+        <div style="font-family:'Space Grotesk';font-size:1.4rem;font-weight:700;color:${roas >= 3 ? 'var(--green)' : roas >= 1 ? 'var(--yellow)' : 'var(--red)'};">${d.inversion > 0 ? roas.toFixed(2)+'x' : '—'}</div>
+      </div>
+      <div>
+        <div style="font-size:0.72rem;color:var(--muted);">Total ventas nuevas</div>
+        <div style="font-family:'Space Grotesk';font-size:1.2rem;font-weight:700;color:var(--accent2);">${fmt(totalVentasNuevas)}</div>
+      </div>
+      <div>
+        <div style="font-size:0.72rem;color:var(--muted);">% de ventas que vino de pauta</div>
+        <div style="font-family:'Space Grotesk';font-size:1.2rem;font-weight:700;">${totalVentasNuevas > 0 ? ((d.ventasPauta/totalVentasNuevas)*100).toFixed(0)+'%' : '—'}</div>
+      </div>
+    </div>
+    <div style="font-size:0.75rem;color:var(--muted);margin-top:10px;">
+      Por cada $1 invertido en pauta, generaste <strong style="color:var(--text);">${d.inversion > 0 ? fmt(roas) : '$0'}</strong> en ventas atribuidas a esa pauta.
+    </div>
+  `;
 }
 
 function renderMetaBar(mes) {
@@ -2840,6 +2919,9 @@ function renderReportes() {
     metaInput.value = '';
   }
   renderMetaBar(mes);
+
+  // ROAS / inversión en publicidad
+  renderRoas(mes);
 
   // Reporte de cierre
   renderCierre(mes);
@@ -3022,12 +3104,13 @@ function saveConfig() {
   const diasPago = JSON.parse(localStorage.getItem('cs_dias_pago') || '{}');
   const pagadosManual = JSON.parse(localStorage.getItem('cs_pagados_manual') || '{}');
   const noPagadosManual = JSON.parse(localStorage.getItem('cs_no_pagados_manual') || '{}');
+  const roas = JSON.parse(localStorage.getItem('cs_roas') || '{}');
   const timestamp = Date.now();
   localStorage.setItem('cs_config_timestamp', timestamp);
   // Guarda categorías, grupos, servicios, días de pago y marcas de pagado — NO los budgets
   fetch(SCRIPT_URL, {
     method: 'POST',
-    body: JSON.stringify({ action: 'saveConfig', pct, expenseCats: EXPENSE_CATS, grupos, incomeCats: INCOME_CATS, metas: metasMensuales, diasPago, pagadosManual, noPagadosManual, timestamp })
+    body: JSON.stringify({ action: 'saveConfig', pct, expenseCats: EXPENSE_CATS, grupos, incomeCats: INCOME_CATS, metas: metasMensuales, diasPago, pagadosManual, noPagadosManual, roas, timestamp })
   }).then(res => {
     if (!res.ok) throw new Error('HTTP ' + res.status);
   }).catch(err => {
