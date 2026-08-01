@@ -1156,6 +1156,9 @@ async function loadData(intento = 1) {
           updateAllCatSelects();
         }
         if (config.grupos) localStorage.setItem('cs_grupos', JSON.stringify(config.grupos));
+        if (config.diasPago) localStorage.setItem('cs_dias_pago', JSON.stringify(config.diasPago));
+        if (config.pagadosManual) localStorage.setItem('cs_pagados_manual', JSON.stringify(config.pagadosManual));
+        if (config.noPagadosManual) localStorage.setItem('cs_no_pagados_manual', JSON.stringify(config.noPagadosManual));
       }
     } catch(e) {}
 
@@ -2109,6 +2112,7 @@ function togglePagadoManual(cat, month) {
     showToast(`✅ ${cat} marcado como pagado`);
   }
   localStorage.setItem('cs_pagados_manual', JSON.stringify(pagadosManual));
+  saveConfig();
   renderBudget();
 }
 
@@ -2132,6 +2136,7 @@ function toggleNoPagadoManual(cat, month) {
     showToast(`⏰ ${cat} marcado como NO pagado este mes — se generará el recordatorio`);
   }
   localStorage.setItem('cs_no_pagados_manual', JSON.stringify(noPagadosManual));
+  saveConfig();
   renderBudget();
 }
 
@@ -2150,6 +2155,7 @@ function editDiaPago(cat) {
   if (nuevo === '') {
     delete diasPago[cat];
     localStorage.setItem('cs_dias_pago', JSON.stringify(diasPago));
+    saveConfig();
     renderBudget();
     return;
   }
@@ -2158,6 +2164,7 @@ function editDiaPago(cat) {
   if (partes.length === 0) { showToast('Número inválido.', 'error'); return; }
   diasPago[cat] = partes.length === 1 ? partes[0] : partes;
   localStorage.setItem('cs_dias_pago', JSON.stringify(diasPago));
+  saveConfig();
   renderBudget();
   showToast(`✓ Día(s) de pago de ${cat}: ${partes.join(' y ')}`);
 }
@@ -3012,12 +3019,15 @@ function saveClientes() {
 function saveConfig() {
   const pct = JSON.parse(localStorage.getItem('cs_pct') || '{}');
   const grupos = JSON.parse(localStorage.getItem('cs_grupos') || 'null') || window._currentGrupos || {};
+  const diasPago = JSON.parse(localStorage.getItem('cs_dias_pago') || '{}');
+  const pagadosManual = JSON.parse(localStorage.getItem('cs_pagados_manual') || '{}');
+  const noPagadosManual = JSON.parse(localStorage.getItem('cs_no_pagados_manual') || '{}');
   const timestamp = Date.now();
   localStorage.setItem('cs_config_timestamp', timestamp);
-  // Solo guarda categorías, grupos y servicios — NO los budgets
+  // Guarda categorías, grupos, servicios, días de pago y marcas de pagado — NO los budgets
   fetch(SCRIPT_URL, {
     method: 'POST',
-    body: JSON.stringify({ action: 'saveConfig', pct, expenseCats: EXPENSE_CATS, grupos, incomeCats: INCOME_CATS, metas: metasMensuales, timestamp })
+    body: JSON.stringify({ action: 'saveConfig', pct, expenseCats: EXPENSE_CATS, grupos, incomeCats: INCOME_CATS, metas: metasMensuales, diasPago, pagadosManual, noPagadosManual, timestamp })
   }).then(res => {
     if (!res.ok) throw new Error('HTTP ' + res.status);
   }).catch(err => {
