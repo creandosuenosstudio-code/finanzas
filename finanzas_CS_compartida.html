@@ -442,6 +442,7 @@
       </select>
       <input type="month" id="filterMonth" onchange="renderTable()">
     </div>
+    <div id="movSummary" style="display:none;margin-bottom:16px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;"></div>
     <div class="card" style="padding: 0; overflow: hidden;">
       <table>
         <thead>
@@ -1004,10 +1005,14 @@
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
         <div class="kpi" style="padding:16px;">
           <div class="kpi-label">Total vendido</div>
           <div class="kpi-value green" id="skoolVendido" style="font-size:1.1rem;">$0</div>
+        </div>
+        <div class="kpi" style="padding:16px;">
+          <div class="kpi-label">Comisiones plataforma</div>
+          <div class="kpi-value yellow" id="skoolComisiones" style="font-size:1.1rem;">$0</div>
         </div>
         <div class="kpi" style="padding:16px;">
           <div class="kpi-label">Invertido en pauta</div>
@@ -1047,6 +1052,22 @@
               <option value="USD">🇺🇸 USD</option>
             </select>
           </div>
+        </div>
+        <div style="flex:1;min-width:160px;">
+          <label>Método de pago</label>
+          <select id="skoolMetodo" onchange="onSkoolMetodoChange()" style="margin-top:6px;">
+            <option value="Hotmart">Hotmart</option>
+            <option value="Transferencia">Transferencia</option>
+            <option value="PayPal">PayPal</option>
+            <option value="Skool">Skool</option>
+            <option value="Binance">Binance</option>
+            <option value="Western Union">Western Union</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div style="flex:1;min-width:110px;">
+          <label>% Comisión</label>
+          <input type="text" id="skoolComisionPct" placeholder="0" inputmode="decimal" style="margin-top:6px;">
         </div>
         <button class="btn-primary" style="width:auto;padding:10px 20px;" onclick="addSkoolCliente()">+ Agregar</button>
       </div>
@@ -1826,6 +1847,27 @@ function renderTable() {
   }
   if (month) filtered = filtered.filter(t => t.date && t.date.startsWith(month));
   if (who) filtered = filtered.filter(t => t.who === who);
+
+  // Resumen del total filtrado — en COP, convirtiendo lo que esté en USD
+  const summaryEl = document.getElementById('movSummary');
+  if (summaryEl) {
+    if (!filtered.length) {
+      summaryEl.style.display = 'none';
+    } else {
+      const aCOP = t => t.currency === 'USD' ? (t.amountCOP || convertirACOP(t.amount, 'USD')) : t.amount;
+      const totalIngresos = filtered.filter(t => t.type === 'income').reduce((s, t) => s + aCOP(t), 0);
+      const totalGastos = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + aCOP(t), 0);
+      const partes = [];
+      if (totalIngresos > 0) partes.push(`<div><div style="font-size:0.72rem;color:var(--muted);">Total ingresos (${filtered.filter(t=>t.type==='income').length})</div><div style="font-family:'Space Grotesk';font-size:1.2rem;font-weight:700;color:var(--green);">${fmt(totalIngresos)}</div></div>`);
+      if (totalGastos > 0) partes.push(`<div><div style="font-size:0.72rem;color:var(--muted);">Total gastos (${filtered.filter(t=>t.type==='expense').length})</div><div style="font-family:'Space Grotesk';font-size:1.2rem;font-weight:700;color:var(--red);">${fmt(totalGastos)}</div></div>`);
+      if (totalIngresos > 0 && totalGastos > 0) {
+        const neto = totalIngresos - totalGastos;
+        partes.push(`<div><div style="font-size:0.72rem;color:var(--muted);">Neto</div><div style="font-family:'Space Grotesk';font-size:1.2rem;font-weight:700;color:${neto>=0?'var(--green)':'var(--red)'};">${fmt(neto)}</div></div>`);
+      }
+      summaryEl.innerHTML = `<div style="display:flex;gap:28px;flex-wrap:wrap;">${partes.join('')}</div>`;
+      summaryEl.style.display = 'block';
+    }
+  }
 
   const tbody = document.getElementById('txTable');
   const empty = document.getElementById('tableEmpty');
@@ -2791,6 +2833,17 @@ function toggleSkoolOtro() {
   if (wrap) wrap.style.display = tipo === 'otro' ? '' : 'none';
 }
 
+// Recuerda el % de comisión que cobra cada método de pago, para no tener que escribirlo cada vez
+let skoolComisionesPorMetodo = JSON.parse(localStorage.getItem('cs_skool_comision_metodos') || '{}');
+
+function onSkoolMetodoChange() {
+  const metodo = document.getElementById('skoolMetodo').value;
+  const pctInput = document.getElementById('skoolComisionPct');
+  if (pctInput && skoolComisionesPorMetodo[metodo] != null) {
+    pctInput.value = skoolComisionesPorMetodo[metodo];
+  }
+}
+
 async function checkSkoolConversion() {
   const moneda = document.getElementById('skoolMoneda')?.value;
   const box = document.getElementById('skoolConversionBox');
@@ -2831,6 +2884,8 @@ async function addSkoolCliente() {
   const detalle = tipo === 'otro' ? document.getElementById('skoolOtroDetalle').value.trim() : '';
   const monto = parseAmt('skoolMonto');
   const moneda = document.getElementById('skoolMoneda')?.value || 'COP';
+  const metodoPago = document.getElementById('skoolMetodo')?.value || 'Otro';
+  const comisionPct = parseFloat((document.getElementById('skoolComisionPct')?.value || '0').replace(',', '.')) || 0;
   const mes = document.getElementById('reportesMes')?.value || currentMonth();
   if (!nombre) { showToast('Ingresa el nombre del cliente.', 'error'); return; }
   if (!monto) { showToast('Ingresa el monto.', 'error'); return; }
@@ -2842,12 +2897,20 @@ async function addSkoolCliente() {
     tasaUsada = await fetchTasa();
     montoCOP = monto * tasaUsada;
   }
+  const comisionCOP = montoCOP * (comisionPct / 100);
+  const netoCOP = montoCOP - comisionCOP;
 
   skoolClientes.push({
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    nombre, tipo, detalle, monto, moneda, montoCOP, tasaUsada, mes,
+    nombre, tipo, detalle, monto, moneda, montoCOP, tasaUsada,
+    metodoPago, comisionPct, comisionCOP, netoCOP, mes,
     fecha: new Date().toISOString().slice(0, 10)
   });
+
+  // Recordar el % de comisión de este método para la próxima vez
+  skoolComisionesPorMetodo[metodoPago] = comisionPct;
+  localStorage.setItem('cs_skool_comision_metodos', JSON.stringify(skoolComisionesPorMetodo));
+
   saveSkool();
   document.getElementById('skoolNombre').value = '';
   document.getElementById('skoolMonto').value = '';
@@ -2864,6 +2927,10 @@ function deleteSkoolCliente(id) {
   renderSkool(document.getElementById('reportesMes')?.value || currentMonth());
 }
 
+function skoolMontoCOP(c) {
+  return c.montoCOP != null ? c.montoCOP : (c.moneda === 'USD' ? convertirACOP(c.monto, 'USD') : c.monto);
+}
+
 function renderSkool(mes) {
   const inversionInput = document.getElementById('skoolInversion');
   if (inversionInput) {
@@ -2871,16 +2938,19 @@ function renderSkool(mes) {
   }
 
   const delMes = skoolClientes.filter(c => c.mes === mes);
-  const totalVendido = delMes.reduce((s, c) => s + (c.montoCOP != null ? c.montoCOP : (c.moneda === 'USD' ? convertirACOP(c.monto, 'USD') : c.monto)), 0);
+  const totalVendido = delMes.reduce((s, c) => s + skoolMontoCOP(c), 0);
+  const totalComisiones = delMes.reduce((s, c) => s + (c.comisionCOP != null ? c.comisionCOP : skoolMontoCOP(c) * ((c.comisionPct || 0) / 100)), 0);
   const inversion = skoolInversiones[mes] || 0;
-  const utilidad = totalVendido - inversion;
+  const utilidad = totalVendido - totalComisiones - inversion;
   const margen = totalVendido > 0 ? (utilidad / totalVendido * 100) : 0;
 
   const vendidoEl = document.getElementById('skoolVendido');
+  const comisionesEl = document.getElementById('skoolComisiones');
   const invertidoEl = document.getElementById('skoolInvertido');
   const utilEl = document.getElementById('skoolUtilidad');
   const margenEl = document.getElementById('skoolMargen');
   if (vendidoEl) vendidoEl.textContent = fmt(totalVendido);
+  if (comisionesEl) comisionesEl.textContent = fmt(totalComisiones);
   if (invertidoEl) invertidoEl.textContent = fmt(inversion);
   if (utilEl) {
     utilEl.textContent = fmt(utilidad);
@@ -2894,21 +2964,27 @@ function renderSkool(mes) {
     listEl.innerHTML = `<div style="color:var(--muted);font-size:0.85rem;padding:12px 0;">Sin clientes nuevos registrados este mes.</div>`;
     return;
   }
-  listEl.innerHTML = delMes.map(c => `
+  listEl.innerHTML = delMes.map(c => {
+    const montoCOP = skoolMontoCOP(c);
+    const comisionCOP = c.comisionCOP != null ? c.comisionCOP : montoCOP * ((c.comisionPct || 0) / 100);
+    const netoCOP = c.netoCOP != null ? c.netoCOP : (montoCOP - comisionCOP);
+    return `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
       <div>
         <div style="font-weight:600;font-size:0.88rem;">${c.nombre}</div>
         <div style="font-size:0.72rem;color:var(--muted);">${c.tipo === 'otro' && c.detalle ? c.detalle : (SKOOL_TIPO_LABEL[c.tipo] || c.tipo)}</div>
+        ${c.metodoPago ? `<div style="font-size:0.7rem;color:var(--muted);margin-top:2px;">${c.metodoPago}${c.comisionPct ? ` · comisión ${c.comisionPct}% (-${fmt(comisionCOP)})` : ''}</div>` : ''}
       </div>
       <div style="display:flex;align-items:center;gap:12px;">
         <div style="text-align:right;">
           <div style="font-weight:700;color:var(--green);font-size:0.88rem;">${fmt(c.monto, c.moneda || 'COP')}</div>
-          ${c.moneda === 'USD' ? `<div style="font-size:0.68rem;color:var(--muted);">≈ ${fmt(c.montoCOP != null ? c.montoCOP : convertirACOP(c.monto, 'USD'))}</div>` : ''}
+          ${c.moneda === 'USD' ? `<div style="font-size:0.68rem;color:var(--muted);">≈ ${fmt(montoCOP)}</div>` : ''}
+          ${c.comisionPct ? `<div style="font-size:0.68rem;color:var(--muted);">Neto: ${fmt(netoCOP)}</div>` : ''}
         </div>
         <span onclick="deleteSkoolCliente('${c.id}')" style="cursor:pointer;color:var(--muted);font-size:1rem;" title="Eliminar">🗑</span>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 // ─── CLIENTES ─────────────────────────────────────────────────────────────────
