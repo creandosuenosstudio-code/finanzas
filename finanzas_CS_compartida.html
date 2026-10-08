@@ -1039,10 +1039,29 @@
           <input type="text" id="skoolOtroDetalle" placeholder="Ej: Sesión personalizada, curso, abono..." style="margin-top:6px;">
         </div>
         <div style="flex:1;min-width:130px;">
-          <label>Monto (COP)</label>
-          <input type="text" id="skoolMonto" placeholder="0" oninput="fmtInput(this)" inputmode="numeric" style="margin-top:6px;">
+          <label>Monto</label>
+          <div style="display:flex;gap:8px;margin-top:6px;">
+            <input type="text" id="skoolMonto" placeholder="0" oninput="fmtInput(this);checkSkoolConversion()" inputmode="numeric" style="flex:1;">
+            <select id="skoolMoneda" onchange="checkSkoolConversion()" style="width:95px;flex-shrink:0;">
+              <option value="COP">🇨🇴 COP</option>
+              <option value="USD">🇺🇸 USD</option>
+            </select>
+          </div>
         </div>
         <button class="btn-primary" style="width:auto;padding:10px 20px;" onclick="addSkoolCliente()">+ Agregar</button>
+      </div>
+
+      <div id="skoolConversionBox" style="display:none;margin-bottom:16px;background:rgba(8,145,178,0.1);border:1px solid rgba(8,145,178,0.3);border-radius:8px;padding:10px 14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div style="font-size:0.72rem;color:var(--muted);margin-bottom:2px;">Equivalente en pesos colombianos</div>
+            <div id="skoolConversionResult" style="font-family:'Space Grotesk';font-size:1.1rem;font-weight:700;color:var(--accent2);">$0 COP</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:0.7rem;color:var(--muted);">Tasa actual</div>
+            <div id="skoolTasaActual" style="font-size:0.8rem;font-weight:600;color:var(--muted);">Cargando...</div>
+          </div>
+        </div>
       </div>
 
       <div id="skoolLista"></div>
@@ -2643,7 +2662,7 @@ function renderMetaBar(mes) {
   const totalIncome = incomeCOP + incomeUSD;
   // La meta del mes (solo aquí, en Reportes) también cuenta las ventas de Ecosistema Skool
   // aunque el dinero no haya llegado todavía — el Dashboard y el Cierre del mes NO las incluyen.
-  const skoolVendidoMes = skoolClientes.filter(c => c.mes === mes).reduce((s,c) => s+c.monto, 0);
+  const skoolVendidoMes = skoolClientes.filter(c => c.mes === mes).reduce((s,c) => s + (c.montoCOP != null ? c.montoCOP : (c.moneda === 'USD' ? convertirACOP(c.monto, 'USD') : c.monto)), 0);
   const totalHaciaMeta = totalIncome + skoolVendidoMes;
   const pct = meta > 0 ? Math.min((totalHaciaMeta/meta)*100, 100) : 0;
   const color = pct >= 100 ? 'var(--green)' : pct >= 70 ? 'var(--accent2)' : pct >= 40 ? 'var(--yellow)' : 'var(--red)';
@@ -2776,6 +2795,24 @@ function toggleSkoolOtro() {
   if (wrap) wrap.style.display = tipo === 'otro' ? '' : 'none';
 }
 
+async function checkSkoolConversion() {
+  const moneda = document.getElementById('skoolMoneda')?.value;
+  const box = document.getElementById('skoolConversionBox');
+  if (moneda !== 'USD') { if (box) box.style.display = 'none'; return; }
+
+  const amount = parseAmt('skoolMonto');
+  if (!amount) { if (box) box.style.display = 'none'; return; }
+
+  if (box) box.style.display = 'block';
+  document.getElementById('skoolTasaActual').textContent = 'Cargando...';
+
+  const tasa = await fetchTasa();
+  const enPesos = amount * tasa;
+
+  document.getElementById('skoolConversionResult').textContent = fmt(enPesos) + ' COP';
+  document.getElementById('skoolTasaActual').textContent = '1 USD = ' + fmt(tasa) + ' COP';
+}
+
 function saveSkool() {
   localStorage.setItem('cs_skool_clientes', JSON.stringify(skoolClientes));
   localStorage.setItem('cs_skool_inversion', JSON.stringify(skoolInversiones));
@@ -2792,24 +2829,34 @@ function saveSkoolInversion() {
   renderSkool(mes);
 }
 
-function addSkoolCliente() {
+async function addSkoolCliente() {
   const nombre = document.getElementById('skoolNombre').value.trim();
   const tipo = document.getElementById('skoolTipo').value;
   const detalle = tipo === 'otro' ? document.getElementById('skoolOtroDetalle').value.trim() : '';
   const monto = parseAmt('skoolMonto');
+  const moneda = document.getElementById('skoolMoneda')?.value || 'COP';
   const mes = document.getElementById('reportesMes')?.value || currentMonth();
   if (!nombre) { showToast('Ingresa el nombre del cliente.', 'error'); return; }
   if (!monto) { showToast('Ingresa el monto.', 'error'); return; }
   if (tipo === 'otro' && !detalle) { showToast('Especifica qué fue ("Otro").', 'error'); return; }
+
+  let montoCOP = monto;
+  let tasaUsada = 0;
+  if (moneda === 'USD') {
+    tasaUsada = await fetchTasa();
+    montoCOP = monto * tasaUsada;
+  }
+
   skoolClientes.push({
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    nombre, tipo, detalle, monto, mes,
+    nombre, tipo, detalle, monto, moneda, montoCOP, tasaUsada, mes,
     fecha: new Date().toISOString().slice(0, 10)
   });
   saveSkool();
   document.getElementById('skoolNombre').value = '';
   document.getElementById('skoolMonto').value = '';
   document.getElementById('skoolOtroDetalle').value = '';
+  document.getElementById('skoolConversionBox').style.display = 'none';
   toggleSkoolOtro();
   renderSkool(mes);
   showToast('✓ Cliente agregado a Ecosistema Skool.');
@@ -2828,7 +2875,7 @@ function renderSkool(mes) {
   }
 
   const delMes = skoolClientes.filter(c => c.mes === mes);
-  const totalVendido = delMes.reduce((s, c) => s + c.monto, 0);
+  const totalVendido = delMes.reduce((s, c) => s + (c.montoCOP != null ? c.montoCOP : (c.moneda === 'USD' ? convertirACOP(c.monto, 'USD') : c.monto)), 0);
   const inversion = skoolInversiones[mes] || 0;
   const utilidad = totalVendido - inversion;
   const margen = totalVendido > 0 ? (utilidad / totalVendido * 100) : 0;
@@ -2858,7 +2905,10 @@ function renderSkool(mes) {
         <div style="font-size:0.72rem;color:var(--muted);">${c.tipo === 'otro' && c.detalle ? c.detalle : (SKOOL_TIPO_LABEL[c.tipo] || c.tipo)}</div>
       </div>
       <div style="display:flex;align-items:center;gap:12px;">
-        <div style="font-weight:700;color:var(--green);font-size:0.88rem;">${fmt(c.monto)}</div>
+        <div style="text-align:right;">
+          <div style="font-weight:700;color:var(--green);font-size:0.88rem;">${fmt(c.monto, c.moneda || 'COP')}</div>
+          ${c.moneda === 'USD' ? `<div style="font-size:0.68rem;color:var(--muted);">≈ ${fmt(c.montoCOP != null ? c.montoCOP : convertirACOP(c.monto, 'USD'))}</div>` : ''}
+        </div>
         <span onclick="deleteSkoolCliente('${c.id}')" style="cursor:pointer;color:var(--muted);font-size:1rem;" title="Eliminar">🗑</span>
       </div>
     </div>
