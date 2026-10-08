@@ -1025,7 +1025,7 @@
         </div>
       </div>
 
-      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
         <div style="flex:2;min-width:160px;">
           <label>Nombre del cliente</label>
           <input type="text" id="skoolNombre" placeholder="Nombre" style="margin-top:6px;">
@@ -1039,21 +1039,24 @@
             <option value="otro">Otro</option>
           </select>
         </div>
-        <div id="skoolOtroWrap" style="flex:1;min-width:160px;display:none;">
+        <div id="skoolOtroWrap" style="flex:1;min-width:200px;display:none;">
           <label>¿Cuál?</label>
           <input type="text" id="skoolOtroDetalle" placeholder="Ej: Sesión personalizada, curso, abono..." style="margin-top:6px;">
         </div>
-        <div style="flex:1;min-width:130px;">
+      </div>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;">
+        <div style="flex:2;min-width:220px;">
           <label>Monto</label>
           <div style="display:flex;gap:8px;margin-top:6px;">
-            <input type="text" id="skoolMonto" placeholder="0" oninput="fmtInput(this);checkSkoolConversion()" inputmode="numeric" style="flex:1;">
-            <select id="skoolMoneda" onchange="checkSkoolConversion()" style="width:95px;flex-shrink:0;">
+            <input type="text" id="skoolMonto" placeholder="0" oninput="fmtInput(this);checkSkoolConversion()" inputmode="numeric" style="flex:2;min-width:120px;font-size:1rem;">
+            <select id="skoolMoneda" onchange="checkSkoolConversion()" style="flex:1;min-width:90px;">
               <option value="COP">🇨🇴 COP</option>
               <option value="USD">🇺🇸 USD</option>
             </select>
           </div>
         </div>
-        <div style="flex:1;min-width:160px;">
+        <div style="flex:1;min-width:170px;">
           <label>Método de pago</label>
           <select id="skoolMetodo" onchange="onSkoolMetodoChange()" style="margin-top:6px;">
             <option value="Hotmart">Hotmart</option>
