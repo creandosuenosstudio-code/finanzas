@@ -2660,11 +2660,7 @@ function renderMetaBar(mes) {
   const incomeCOP = transactions.filter(t => t.type==='income' && (t.currency||'COP')==='COP' && t.date && t.date.startsWith(mes)).reduce((s,t)=>s+t.amount,0);
   const incomeUSD = transactions.filter(t => t.type==='income' && t.currency==='USD' && t.date && t.date.startsWith(mes)).reduce((s,t)=>s+(t.amountCOP||convertirACOP(t.amount,'USD')),0);
   const totalIncome = incomeCOP + incomeUSD;
-  // La meta del mes (solo aquí, en Reportes) también cuenta las ventas de Ecosistema Skool
-  // aunque el dinero no haya llegado todavía — el Dashboard y el Cierre del mes NO las incluyen.
-  const skoolVendidoMes = skoolClientes.filter(c => c.mes === mes).reduce((s,c) => s + (c.montoCOP != null ? c.montoCOP : (c.moneda === 'USD' ? convertirACOP(c.monto, 'USD') : c.monto)), 0);
-  const totalHaciaMeta = totalIncome + skoolVendidoMes;
-  const pct = meta > 0 ? Math.min((totalHaciaMeta/meta)*100, 100) : 0;
+  const pct = meta > 0 ? Math.min((totalIncome/meta)*100, 100) : 0;
   const color = pct >= 100 ? 'var(--green)' : pct >= 70 ? 'var(--accent2)' : pct >= 40 ? 'var(--yellow)' : 'var(--red)';
 
   const bar = document.getElementById('metaBar');
@@ -2676,12 +2672,12 @@ function renderMetaBar(mes) {
   if (pctEl) pctEl.textContent = pct.toFixed(1)+'% de la meta';
   if (faltaEl) {
     if (pct >= 100) faltaEl.textContent = '✓ Meta cumplida!';
-    else if (meta > 0) faltaEl.textContent = `Falta: ${fmt(meta - totalHaciaMeta)}`;
+    else if (meta > 0) faltaEl.textContent = `Falta: ${fmt(meta - totalIncome)}`;
   }
   if (statusEl) {
     statusEl.innerHTML = `
       <div style="display:flex;gap:20px;flex-wrap:wrap;">
-        <div><div style="font-size:0.72rem;color:var(--muted);">Facturado</div><div style="font-family:'Space Grotesk';font-size:1.3rem;font-weight:700;color:var(--green);">${fmt(totalHaciaMeta)}</div>${skoolVendidoMes > 0 ? `<div style="font-size:0.68rem;color:var(--muted);margin-top:2px;">Incluye ${fmt(skoolVendidoMes)} de Skool (por cobrar)</div>` : ''}</div>
+        <div><div style="font-size:0.72rem;color:var(--muted);">Facturado</div><div style="font-family:'Space Grotesk';font-size:1.3rem;font-weight:700;color:var(--green);">${fmt(totalIncome)}</div></div>
         <div><div style="font-size:0.72rem;color:var(--muted);">Meta</div><div style="font-family:'Space Grotesk';font-size:1.3rem;font-weight:700;color:var(--accent2);">${meta > 0 ? fmt(meta) : '—'}</div></div>
         ${pct >= 100 ? '<div style="font-size:1.5rem;align-self:center;">🎉</div>' : ''}
       </div>
