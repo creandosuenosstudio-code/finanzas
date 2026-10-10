@@ -965,7 +965,11 @@
   <div class="section" id="reportes">
     <div class="section-header">
       <h2>📊 Reportes</h2>
-      <select id="reportesMes" onchange="renderReportes()" style="width:auto;background:var(--surface);border:1px solid var(--border);padding:8px 14px;border-radius:9px;"></select>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <span id="reportesSyncBadge" style="font-size:0.78rem;color:var(--muted);"></span>
+        <button class="refresh-btn" onclick="verificarReportes()" title="Revisa que lo que ves aquí esté guardado en el servidor">↻ Verificar guardado</button>
+        <select id="reportesMes" onchange="renderReportes()" style="width:auto;background:var(--surface);border:1px solid var(--border);padding:8px 14px;border-radius:9px;"></select>
+      </div>
     </div>
 
     <!-- META MENSUAL -->
@@ -974,7 +978,7 @@
       <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px;">
         <div style="flex:1;min-width:200px;">
           <label>Meta del mes (COP)</label>
-          <input type="text" id="metaMensual" placeholder="0" oninput="fmtInput(this);saveMetaMensual()" inputmode="numeric" style="margin-top:6px;">
+          <input type="text" id="metaMensual" placeholder="0" oninput="fmtInput(this);saveMetaMensual()" onblur="flushDebounceReportes()" inputmode="numeric" style="margin-top:6px;">
         </div>
         <div id="metaStatus" style="flex:2;min-width:200px;"></div>
       </div>
@@ -1001,7 +1005,7 @@
       <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border);">
         <div style="flex:1;min-width:220px;">
           <label>Inversión en publicidad del mes (COP)</label>
-          <input type="text" id="skoolInversion" placeholder="0" oninput="fmtInput(this);saveSkoolInversion()" inputmode="numeric" style="margin-top:6px;">
+          <input type="text" id="skoolInversion" placeholder="0" oninput="fmtInput(this);saveSkoolInversion()" onblur="flushDebounceReportes()" inputmode="numeric" style="margin-top:6px;">
         </div>
       </div>
 
@@ -1201,10 +1205,7 @@ async function loadData() {
           localStorage.setItem('cs_budgets', JSON.stringify(budgets));
         }
         if (config.pct) localStorage.setItem('cs_pct', JSON.stringify(config.pct));
-        if (config.metas) {
-          metasMensuales = config.metas;
-          localStorage.setItem('cs_metas', JSON.stringify(metasMensuales));
-        }
+        reconcileMetas(config.metas || {});
         if (config.incomeCats && config.incomeCats.length > 0) {
           INCOME_CATS = config.incomeCats;
           localStorage.setItem('cs_income_cats', JSON.stringify(INCOME_CATS));
@@ -1219,21 +1220,9 @@ async function loadData() {
       }
     } catch(e) {}
 
-    // Cargar Ecosistema Skool
-    try {
-      const resS = await fetch(`${SCRIPT_URL}?action=getSkool&t=${Date.now()}`);
-      const skool = await resS.json();
-      if (skool) {
-        if (Array.isArray(skool.clientes)) {
-          skoolClientes = skool.clientes;
-          localStorage.setItem('cs_skool_clientes', JSON.stringify(skoolClientes));
-        }
-        if (skool.inversiones) {
-          skoolInversiones = skool.inversiones;
-          localStorage.setItem('cs_skool_inversion', JSON.stringify(skoolInversiones));
-        }
-      }
-    } catch(e) {}
+    // Cargar Ecosistema Skool (y reenviar lo que haya quedado pendiente de guardar)
+    await cargarSkoolDelServidor();
+    flushReportesPending();
 
     setSyncStatus('ok');
     populateMonthSelectors();
@@ -1281,7 +1270,7 @@ function showSection(id) {
   if (id === 'movimientos') renderTable();
   if (id === 'presupuesto') renderBudget();
   if (id === 'clientes') renderClientes();
-  if (id === 'reportes') renderReportes();
+  if (id === 'reportes') { renderReportes(); refrescarReportesDelServidor(); }
 }
 
 // ─── TYPE TOGGLE ─────────────────────────────────────────────────────────────
@@ -2688,17 +2677,245 @@ function saveMetaMensual() {
   const val = parseAmt('metaMensual');
   metasMensuales[mes] = val;
   localStorage.setItem('cs_metas', JSON.stringify(metasMensuales));
-  saveMetas(); // Guardar en Sheet — acción propia, no comparte bloque con categorías/grupos
   renderMetaBar(mes);
+  // Se manda solo ESTE mes, cuando dejas de escribir (no una vez por cada tecla)
+  debounceReportes('meta:' + mes, 700, () => {
+    metasMensuales[mes] = val;
+    enqueueReportesOp({ action: 'setMeta', mes, valor: val });
+  });
 }
 
-function saveMetas() {
-  const timestamp = Date.now();
-  fetch(SCRIPT_URL, {
-    method: 'POST',
-    body: JSON.stringify({ action: 'saveMetas', metas: metasMensuales, timestamp })
-  }).catch(() => {});
+// ─── GUARDADO SEGURO DE REPORTES (metas + Ecosistema Skool) ──────────────────
+// Cada cambio es UNA operación pequeña (agregar un cliente, borrar uno, fijar la inversión
+// de un mes, fijar la meta de un mes). Se manda al servidor y solo se da por guardada cuando
+// el servidor responde "SAVED". Si falla (sin internet, Apps Script caído, versión vieja del
+// script), queda en una cola dentro de este computador, se reintenta sola y se avisa arriba.
+let reportesPending = [];
+try { reportesPending = JSON.parse(localStorage.getItem('cs_reportes_pending') || '[]'); } catch(e) { reportesPending = []; }
+let reportesFlushing = false;
+let reportesInFlight = null;
+let reportesRetryTimer = null;
+let reportesRetryMs = 8000;
+let reportesServerOutdated = false;
+let reportesVerificado = '';
+let reportesToastAt = 0;
+const reportesDebounce = {};
+
+function nuevoOpId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+function debounceReportes(key, ms, fn) {
+  if (reportesDebounce[key]) clearTimeout(reportesDebounce[key].t);
+  reportesDebounce[key] = { t: setTimeout(() => { delete reportesDebounce[key]; fn(); }, ms), fn };
 }
+
+function flushDebounceReportes() {
+  Object.keys(reportesDebounce).forEach(k => {
+    const d = reportesDebounce[k];
+    clearTimeout(d.t);
+    delete reportesDebounce[k];
+    d.fn();
+  });
+}
+
+function persistReportesPending() {
+  try { localStorage.setItem('cs_reportes_pending', JSON.stringify(reportesPending)); } catch(e) {}
+  updateReportesBadge();
+}
+
+function enqueueReportesOp(op) {
+  op.opId = nuevoOpId();
+  // Para "fijar un valor" solo importa el último: se reemplaza el anterior que aún no salió
+  if (op.action === 'skoolSetInversion' || op.action === 'setMeta') {
+    reportesPending = reportesPending.filter(p => p.opId === reportesInFlight || !(p.action === op.action && p.mes === op.mes));
+  }
+  reportesPending.push(op);
+  persistReportesPending();
+  flushReportesPending();
+}
+
+async function flushReportesPending() {
+  if (reportesFlushing) return;
+  reportesFlushing = true;
+  let fallo = false;
+  try {
+    while (reportesPending.length) {
+      const op = reportesPending[0];
+      reportesInFlight = op.opId;
+      let ok = false;
+      try {
+        const res = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(op) });
+        const texto = (await res.text()).trim();
+        ok = res.ok && texto.startsWith('SAVED');
+        // Un Apps Script sin actualizar contesta "OK" a todo sin guardar nada
+        reportesServerOutdated = res.ok && texto === 'OK';
+      } catch (e) { ok = false; }
+      reportesInFlight = null;
+      if (!ok) { fallo = true; break; }
+      reportesPending = reportesPending.filter(p => p.opId !== op.opId);
+      persistReportesPending();
+    }
+  } finally {
+    reportesFlushing = false;
+    reportesInFlight = null;
+  }
+  if (fallo) {
+    clearTimeout(reportesRetryTimer);
+    reportesRetryTimer = setTimeout(flushReportesPending, reportesRetryMs);
+    reportesRetryMs = Math.min(reportesRetryMs * 2, 60000);
+    if (Date.now() - reportesToastAt > 60000) {
+      reportesToastAt = Date.now();
+      showToast(reportesServerOutdated
+        ? '⚠ Falta actualizar el Apps Script (Nueva versión). Lo que escribiste queda pendiente en este computador.'
+        : '⚠ No se pudo guardar en el servidor. Queda pendiente y se reintenta solo.', 'error');
+    }
+  } else {
+    reportesRetryMs = 8000;
+    clearTimeout(reportesRetryTimer);
+  }
+  updateReportesBadge();
+}
+
+function updateReportesBadge() {
+  const el = document.getElementById('reportesSyncBadge');
+  if (!el) return;
+  const n = reportesPending.length;
+  if (reportesServerOutdated) {
+    el.textContent = '⚠ Falta actualizar el Apps Script — ' + n + ' cambio' + (n === 1 ? '' : 's') + ' sin guardar';
+    el.style.color = 'var(--red)';
+  } else if (n > 0) {
+    el.textContent = '⚠ ' + n + ' cambio' + (n === 1 ? '' : 's') + ' sin guardar en el servidor — reintentando…';
+    el.style.color = 'var(--yellow)';
+  } else {
+    el.textContent = reportesVerificado || '✓ Sin cambios pendientes';
+    el.style.color = 'var(--green)';
+  }
+}
+
+// Estado de Skool = lo que dice el servidor + lo que todavía está pendiente de enviar
+function aplicarPendientesSkool() {
+  reportesPending.forEach(p => {
+    if (p.action === 'skoolAdd' && p.cliente && !skoolClientes.some(c => String(c.id) === String(p.cliente.id))) skoolClientes.push(p.cliente);
+    if (p.action === 'skoolDelete') skoolClientes = skoolClientes.filter(c => String(c.id) !== String(p.id));
+    if (p.action === 'skoolSetInversion') skoolInversiones[p.mes] = p.valor;
+  });
+}
+
+function persistSkoolLocal() {
+  try {
+    localStorage.setItem('cs_skool_clientes', JSON.stringify(skoolClientes));
+    localStorage.setItem('cs_skool_inversion', JSON.stringify(skoolInversiones));
+  } catch(e) {}
+}
+
+// Trae Skool del servidor. Devuelve el objeto del servidor, o null si no se pudo conectar.
+async function cargarSkoolDelServidor() {
+  let server;
+  try {
+    const res = await fetch(`${SCRIPT_URL}?action=getSkool&t=${Date.now()}`);
+    server = await res.json();
+  } catch (e) { return null; }
+  if (!server || !Array.isArray(server.clientes)) return null;
+
+  // Apps Script sin actualizar: no se toca lo que hay en este computador
+  if (server.v !== 2) { reportesServerOutdated = true; updateReportesBadge(); return server; }
+  reportesServerOutdated = false;
+
+  // 1) Lo que este computador tenía y el servidor nunca recibió (guardados viejos que fallaron
+  //    en silencio) se recupera y se vuelve a enviar. No se re-crea lo que alguien borró a propósito
+  //    ni lo que ya existe igual en el servidor.
+  const serverIds = new Set(server.clientes.map(c => String(c.id)));
+  const borrados = new Set((server.borrados || []).map(String));
+  const firma = c => [String(c.nombre || '').trim().toLowerCase(), c.mes, Number(c.monto) || 0, c.moneda || 'COP', c.metodoPago || ''].join('|');
+  const firmasServidor = new Set(server.clientes.map(firma));
+  const pendAdd = new Set(reportesPending.filter(p => p.action === 'skoolAdd' && p.cliente).map(p => String(p.cliente.id)));
+  let recuperados = 0;
+  skoolClientes.forEach(c => {
+    const id = String(c.id);
+    if (serverIds.has(id) || borrados.has(id) || pendAdd.has(id) || firmasServidor.has(firma(c))) return;
+    reportesPending.push({ action: 'skoolAdd', cliente: c, opId: nuevoOpId() });
+    recuperados++;
+  });
+  Object.keys(skoolInversiones).forEach(mes => {
+    if (!skoolInversiones[mes] || (server.inversiones && mes in server.inversiones)) return;
+    if (reportesPending.some(p => p.action === 'skoolSetInversion' && p.mes === mes)) return;
+    reportesPending.push({ action: 'skoolSetInversion', mes, valor: skoolInversiones[mes], opId: nuevoOpId() });
+  });
+
+  // 2) El estado visible = servidor + pendientes
+  skoolClientes = server.clientes.slice();
+  skoolInversiones = Object.assign({}, server.inversiones || {});
+  aplicarPendientesSkool();
+  persistSkoolLocal();
+  persistReportesPending();
+  if (recuperados > 0) showToast('✓ Se recuperaron ' + recuperados + ' cliente' + (recuperados === 1 ? '' : 's') + ' de Skool que estaban solo en este computador.');
+  return server;
+}
+
+// Igual para las metas: servidor + pendientes; y se reenvía lo que solo este computador tenga
+function reconcileMetas(serverMetas) {
+  Object.keys(metasMensuales).forEach(mes => {
+    if (!metasMensuales[mes] || mes in serverMetas) return;
+    if (reportesPending.some(p => p.action === 'setMeta' && p.mes === mes)) return;
+    reportesPending.push({ action: 'setMeta', mes, valor: metasMensuales[mes], opId: nuevoOpId() });
+  });
+  metasMensuales = Object.assign({}, serverMetas);
+  reportesPending.filter(p => p.action === 'setMeta').forEach(p => { metasMensuales[p.mes] = p.valor; });
+  try { localStorage.setItem('cs_metas', JSON.stringify(metasMensuales)); } catch(e) {}
+  persistReportesPending();
+}
+
+async function refrescarReportesDelServidor() {
+  await flushReportesPending();
+  const antes = JSON.stringify([skoolClientes, skoolInversiones, metasMensuales]);
+  await cargarSkoolDelServidor();
+  try {
+    const res = await fetch(`${SCRIPT_URL}?action=getConfig&t=${Date.now()}`);
+    const config = await res.json();
+    if (config && typeof config === 'object') reconcileMetas(config.metas || {});
+  } catch (e) {}
+  flushReportesPending();
+  const activa = document.getElementById('reportes')?.classList.contains('active');
+  if (activa && antes !== JSON.stringify([skoolClientes, skoolInversiones, metasMensuales])) renderReportes();
+}
+
+// Botón "Verificar guardado": confirma contra el servidor que lo que se ve aquí está guardado
+async function verificarReportes() {
+  flushDebounceReportes();
+  showToast('Verificando con el servidor…');
+  await flushReportesPending();
+  const server = await cargarSkoolDelServidor();
+  if (!server) {
+    reportesVerificado = '';
+    updateReportesBadge();
+    showToast('⚠ No se pudo conectar con el servidor. Lo que escribiste sigue guardado en este computador.', 'error');
+    return;
+  }
+  await flushReportesPending();
+  const otra = await cargarSkoolDelServidor();
+  renderReportes();
+  const idsLocal = skoolClientes.map(c => String(c.id)).sort().join(',');
+  const idsServer = otra && otra.v === 2 ? otra.clientes.map(c => String(c.id)).sort().join(',') : null;
+  if (reportesServerOutdated || idsServer === null) {
+    showToast('⚠ Falta actualizar el Apps Script (Nueva versión) para poder guardar en el servidor.', 'error');
+  } else if (reportesPending.length) {
+    showToast('⚠ Quedan ' + reportesPending.length + ' cambios sin guardar. Se reintentan solos.', 'error');
+  } else if (idsLocal === idsServer) {
+    const n = skoolClientes.length;
+    reportesVerificado = '✓ Verificado ' + new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) + ' · servidor: ' + n + ' cliente' + (n === 1 ? '' : 's') + ' de Skool';
+    showToast('✓ Todo coincide: el servidor tiene ' + n + ' cliente' + (n === 1 ? '' : 's') + ' de Skool, igual que aquí.');
+  } else {
+    showToast('⚠ Hay diferencias con el servidor. Intenta de nuevo en un momento.', 'error');
+  }
+  updateReportesBadge();
+}
+
+window.addEventListener('online', () => flushReportesPending());
+window.addEventListener('pagehide', flushDebounceReportes);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { flushDebounceReportes(); return; }
+  flushReportesPending();
+  if (document.getElementById('reportes')?.classList.contains('active')) refrescarReportesDelServidor();
+});
 
 function renderMetaBar(mes) {
   const meta = metasMensuales[mes] || 0;
@@ -2755,6 +2972,7 @@ function renderReportes() {
 
   // Ecosistema Skool
   renderSkool(mes);
+  updateReportesBadge();
 }
 
 function renderCierre(mes) {
@@ -2865,20 +3083,18 @@ async function checkSkoolConversion() {
   document.getElementById('skoolTasaActual').textContent = '1 USD = ' + fmt(tasa) + ' COP';
 }
 
-function saveSkool() {
-  localStorage.setItem('cs_skool_clientes', JSON.stringify(skoolClientes));
-  localStorage.setItem('cs_skool_inversion', JSON.stringify(skoolInversiones));
-  fetch(SCRIPT_URL, {
-    method: 'POST',
-    body: JSON.stringify({ action: 'saveSkool', skoolClientes, skoolInversiones })
-  }).catch(() => {});
-}
-
 function saveSkoolInversion() {
   const mes = document.getElementById('reportesMes')?.value || currentMonth();
-  skoolInversiones[mes] = parseAmt('skoolInversion');
-  saveSkool();
+  const valor = parseAmt('skoolInversion');
+  skoolInversiones[mes] = valor;
+  persistSkoolLocal();
   renderSkool(mes);
+  // Se manda solo ESTE mes, cuando dejas de escribir (no una vez por cada tecla)
+  debounceReportes('inversion:' + mes, 700, () => {
+    skoolInversiones[mes] = valor;
+    persistSkoolLocal();
+    enqueueReportesOp({ action: 'skoolSetInversion', mes, valor });
+  });
 }
 
 async function addSkoolCliente() {
@@ -2903,18 +3119,20 @@ async function addSkoolCliente() {
   const comisionCOP = montoCOP * (comisionPct / 100);
   const netoCOP = montoCOP - comisionCOP;
 
-  skoolClientes.push({
-    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+  const cliente = {
+    id: nuevoOpId() + Math.random().toString(36).slice(2, 5),
     nombre, tipo, detalle, monto, moneda, montoCOP, tasaUsada,
     metodoPago, comisionPct, comisionCOP, netoCOP, mes,
     fecha: new Date().toISOString().slice(0, 10)
-  });
+  };
+  skoolClientes.push(cliente);
 
   // Recordar el % de comisión de este método para la próxima vez
   skoolComisionesPorMetodo[metodoPago] = comisionPct;
   localStorage.setItem('cs_skool_comision_metodos', JSON.stringify(skoolComisionesPorMetodo));
 
-  saveSkool();
+  persistSkoolLocal();
+  enqueueReportesOp({ action: 'skoolAdd', cliente });
   document.getElementById('skoolNombre').value = '';
   document.getElementById('skoolMonto').value = '';
   document.getElementById('skoolOtroDetalle').value = '';
@@ -2925,8 +3143,12 @@ async function addSkoolCliente() {
 }
 
 function deleteSkoolCliente(id) {
-  skoolClientes = skoolClientes.filter(c => c.id !== id);
-  saveSkool();
+  const c = skoolClientes.find(x => String(x.id) === String(id));
+  if (!c) return;
+  if (!confirm(`¿Eliminar a ${c.nombre} (${c.metodoPago || 'sin método'}, ${fmt(c.monto, c.moneda || 'COP')})? Esta acción no se puede deshacer.`)) return;
+  skoolClientes = skoolClientes.filter(x => String(x.id) !== String(id));
+  persistSkoolLocal();
+  enqueueReportesOp({ action: 'skoolDelete', id: String(id) });
   renderSkool(document.getElementById('reportesMes')?.value || currentMonth());
 }
 
@@ -2936,7 +3158,7 @@ function skoolMontoCOP(c) {
 
 function renderSkool(mes) {
   const inversionInput = document.getElementById('skoolInversion');
-  if (inversionInput) {
+  if (inversionInput && document.activeElement !== inversionInput) {
     inversionInput.value = skoolInversiones[mes] ? new Intl.NumberFormat('es-CO').format(skoolInversiones[mes]) : '';
   }
 
