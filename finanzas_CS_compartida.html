@@ -625,6 +625,7 @@
         <option value="">💳 Todos los pagos</option>
         <option value="aldia">Al día</option>
         <option value="mora">En mora</option>
+        <option value="saldado">Saldado (pagó todo)</option>
       </select>
       <select id="filterEstadoCliente" onchange="renderClientes()" style="flex:1;min-width:140px;">
         <option value="">📋 Todos los estados</option>
@@ -639,7 +640,7 @@
     </div>
 
     <!-- STATS RÁPIDOS -->
-    <div class="kpi-row" style="margin-bottom:24px;grid-template-columns:repeat(4,1fr);">
+    <div class="kpi-row" style="margin-bottom:24px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
       <div class="kpi">
         <div class="kpi-label">Clientes activos</div>
         <div class="kpi-value purple" id="statActivos">0</div>
@@ -651,6 +652,10 @@
       <div class="kpi">
         <div class="kpi-label">En pausa</div>
         <div class="kpi-value yellow" id="statPausa">0</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Saldados (siguen activos)</div>
+        <div class="kpi-value green" id="statSaldados">0</div>
       </div>
       <div class="kpi">
         <div class="kpi-label">En mora — cuotas vencidas</div>
@@ -3533,7 +3538,8 @@ function renderClientes() {
       (c.identificacion||'').toLowerCase().includes(search);
     const matchPago = !filterPago ||
       (filterPago === 'mora' && isMora(c)) ||
-      (filterPago === 'aldia' && !isMora(c) && getSaldoPendiente(c) > 0 && c.estado === 'activo');
+      (filterPago === 'aldia' && !isMora(c) && getSaldoPendiente(c) > 0 && c.estado === 'activo') ||
+      (filterPago === 'saldado' && c.estado === 'activo' && getSaldoPendiente(c) === 0);
     const matchEstado = !filterEstado || c.estado === filterEstado;
     const matchPais = !filterPais || c.pais === filterPais;
     return matchSearch && matchPago && matchEstado && matchPais;
@@ -3543,6 +3549,8 @@ function renderClientes() {
   document.getElementById('statActivos').textContent = clientes.filter(c => c.estado === 'activo').length;
   document.getElementById('statMora').textContent = clientes.filter(c => isMora(c)).length;
   document.getElementById('statPausa').textContent = clientes.filter(c => c.estado === 'pausado').length;
+  const elSald = document.getElementById('statSaldados');
+  if (elSald) elSald.textContent = clientes.filter(c => c.estado === 'activo' && getSaldoPendiente(c) === 0).length;
   // Cartera = solo cuotas vencidas de clientes en mora
   const carteraCOP = clientes.filter(c => (c.moneda||'COP')==='COP').reduce((s,c) => s + getCuotaVencida(c), 0);
   const carteraUSD = clientes.filter(c => c.moneda==='USD').reduce((s,c) => s + getCuotaVencida(c), 0);
