@@ -639,24 +639,12 @@
       <button class="refresh-btn" onclick="limpiarFiltros()" style="white-space:nowrap;">✕ Limpiar filtros</button>
     </div>
 
+    <!-- CATEGORÍAS DE ARTISTAS -->
+    <div id="catCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px;"></div>
+    <div id="catPanel" style="display:none;margin-bottom:24px;"></div>
+
     <!-- STATS RÁPIDOS -->
-    <div class="kpi-row" style="margin-bottom:24px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
-      <div class="kpi">
-        <div class="kpi-label">Clientes activos</div>
-        <div class="kpi-value purple" id="statActivos">0</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">En mora</div>
-        <div class="kpi-value red" id="statMora">0</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">En pausa</div>
-        <div class="kpi-value yellow" id="statPausa">0</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">Saldados (siguen activos)</div>
-        <div class="kpi-value green" id="statSaldados">0</div>
-      </div>
+    <div class="kpi-row" style="margin-bottom:24px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));">
       <div class="kpi">
         <div class="kpi-label">En mora — cuotas vencidas</div>
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">
@@ -837,6 +825,17 @@
           <div class="form-group">
             <label>Fecha inicio contrato</label>
             <input type="date" id="cFechaInicio">
+          </div>
+          <div class="form-group">
+            <label>Categoría</label>
+            <select id="cCategoria">
+              <option value="">Sin categoría</option>
+              <option value="evacuar">Clientes que ya pagaron y toca evacuar</option>
+              <option value="virtual">Clientes 100% Virtuales (no afecta el cierre de sede)</option>
+              <option value="menos6">Clientes que terminan en menos de 6 meses</option>
+              <option value="6a12">Clientes entre 6 meses y un año</option>
+              <option value="eterno">Clientes eternos</option>
+            </select>
           </div>
           <div class="form-group">
             <label>Estado</label>
@@ -3314,6 +3313,7 @@ function showClienteForm(id = null) {
       document.getElementById('cMesInicioCobro').value = c.mesInicioCobro || '';
       document.getElementById('cFechaInicio').value = c.fechaInicio || '';
       document.getElementById('cEstado').value = c.estado || 'activo';
+      document.getElementById('cCategoria').value = c.categoria || '';
       document.getElementById('cNotas').value = c.notas || '';
     }
   } else {
@@ -3326,6 +3326,7 @@ function showClienteForm(id = null) {
     document.getElementById('cMoneda').value = 'COP';
     document.getElementById('cFechaInicio').value = new Date().toISOString().slice(0,10);
     document.getElementById('cEstado').value = 'activo';
+    document.getElementById('cCategoria').value = '';
   }
   document.getElementById('clienteFormModal').style.display = 'block';
 }
@@ -3365,6 +3366,7 @@ function saveCliente() {
     mesInicioCobro: document.getElementById('cMesInicioCobro').value || '',
     fechaInicio: document.getElementById('cFechaInicio').value,
     estado: document.getElementById('cEstado').value,
+    categoria: document.getElementById('cCategoria').value,
     notas: document.getElementById('cNotas').value.trim(),
     pagos: clientes.find(x => x.id === id)?.pagos || []
   };
@@ -3502,6 +3504,78 @@ function getEstadoBadge(cliente) {
   return `<span class="badge" style="background:rgba(8,145,178,0.15);color:var(--accent2);">Activo</span>`;
 }
 
+
+// ===== CATEGORÍAS DE ARTISTAS =====
+const CATEGORIAS_CLIENTES = [
+  { id: 'evacuar', label: 'Clientes que ya pagaron y toca evacuar', color: '#a4c2f4' },
+  { id: 'virtual', label: 'Clientes 100% Virtuales (no afecta el cierre de sede)', color: '#a2c4c9' },
+  { id: 'menos6',  label: 'Clientes que terminan en menos de 6 meses', color: '#f9cb9c' },
+  { id: '6a12',    label: 'Clientes entre 6 meses y un año', color: '#dd7e6b' },
+  { id: 'eterno',  label: 'Clientes eternos', color: '#d5a6bd' },
+  { id: '',        label: 'Sin categoría', color: '#8888a0' }
+];
+let catAbierta = null;
+
+function toggleCategoria(id) {
+  catAbierta = (catAbierta === id) ? null : id;
+  renderCategoriasClientes();
+}
+
+function cambiarCategoriaCliente(clienteId, cat) {
+  const c = clientes.find(x => x.id === clienteId);
+  if (!c) return;
+  c.categoria = cat;
+  saveClientes();
+  renderCategoriasClientes();
+  showToast('✓ Categoría actualizada');
+}
+
+function renderCategoriasClientes() {
+  const cards = document.getElementById('catCards');
+  const panel = document.getElementById('catPanel');
+  if (!cards || !panel) return;
+  const activos = clientes.filter(c => c.estado !== 'terminado');
+  const validas = CATEGORIAS_CLIENTES.map(x => x.id);
+  const catDe = c => validas.includes(c.categoria || '') ? (c.categoria || '') : '';
+  const sinCat = activos.filter(c => !catDe(c)).length;
+
+  cards.innerHTML = CATEGORIAS_CLIENTES
+    .filter(cat => cat.id !== '' || sinCat > 0)
+    .map(cat => {
+      const n = activos.filter(c => catDe(c) === cat.id).length;
+      const sel = catAbierta === cat.id;
+      return `<div onclick="toggleCategoria('${cat.id}')" style="cursor:pointer;background:${cat.color};color:#1a1a1a;border-radius:10px;padding:12px 14px;min-height:84px;display:flex;flex-direction:column;justify-content:space-between;border:3px solid ${sel ? 'var(--text, #fff)' : 'transparent'};transition:transform .1s;">
+        <div style="font-weight:700;font-size:0.82rem;line-height:1.25;">${cat.label}</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:8px;">
+          <span style="font-family:'Space Grotesk';font-weight:800;font-size:1.7rem;line-height:1;">${n}</span>
+          <span style="font-size:0.72rem;font-weight:600;">${sel ? '▲ cerrar' : '▼ ver artistas'}</span>
+        </div>
+      </div>`;
+    }).join('');
+
+  if (catAbierta === null) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
+  const cat = CATEGORIAS_CLIENTES.find(x => x.id === catAbierta);
+  if (!cat) { panel.style.display = 'none'; return; }
+  const lista = activos.filter(c => catDe(c) === cat.id);
+  const opts = id => CATEGORIAS_CLIENTES.map(x => `<option value="${x.id}" ${x.id === id ? 'selected' : ''}>${x.id === '' ? 'Sin categoría' : x.label}</option>`).join('');
+  panel.style.display = 'block';
+  panel.innerHTML = `<div class="card" style="border-left:5px solid ${cat.color};padding:14px;">
+    <div style="font-weight:700;margin-bottom:10px;">${cat.label} · ${lista.length}</div>
+    ${lista.length ? lista.map(c => `
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--border);">
+        <div style="flex:1;min-width:180px;cursor:pointer;" onclick="openFicha('${c.id}')">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-weight:600;">${c.nombre}</span> ${getEstadoBadge(c)}</div>
+          <div style="font-size:0.75rem;color:var(--muted);">${c.servicio || ''}${c.pais ? ' · ' + c.pais : ''}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-weight:700;font-size:0.9rem;color:${getSaldoPendiente(c) > 0 ? 'var(--red)' : 'var(--green)'};">${fmt(getSaldoPendiente(c), c.moneda)}</div>
+          <div style="font-size:0.7rem;color:var(--muted);">pendiente</div>
+        </div>
+        <select onchange="cambiarCategoriaCliente('${c.id}', this.value)" style="max-width:210px;font-size:0.75rem;">${opts(cat.id)}</select>
+      </div>`).join('') : '<div style="color:var(--muted);font-size:0.85rem;">Ningún artista en esta categoría todavía. Asígnalos desde "Sin categoría" o editando el artista.</div>'}
+  </div>`;
+}
+
 function limpiarFiltros() {
   document.getElementById('clienteSearch').value = '';
   document.getElementById('filterEstadoPago').value = '';
@@ -3546,11 +3620,7 @@ function renderClientes() {
   });
 
   // Stats
-  document.getElementById('statActivos').textContent = clientes.filter(c => c.estado === 'activo').length;
-  document.getElementById('statMora').textContent = clientes.filter(c => isMora(c)).length;
-  document.getElementById('statPausa').textContent = clientes.filter(c => c.estado === 'pausado').length;
-  const elSald = document.getElementById('statSaldados');
-  if (elSald) elSald.textContent = clientes.filter(c => c.estado === 'activo' && getSaldoPendiente(c) === 0).length;
+  renderCategoriasClientes();
   // Cartera = solo cuotas vencidas de clientes en mora
   const carteraCOP = clientes.filter(c => (c.moneda||'COP')==='COP').reduce((s,c) => s + getCuotaVencida(c), 0);
   const carteraUSD = clientes.filter(c => c.moneda==='USD').reduce((s,c) => s + getCuotaVencida(c), 0);
