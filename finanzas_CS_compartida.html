@@ -1198,7 +1198,10 @@ async function loadData() {
     try {
       const resA = await fetch(`${SCRIPT_URL}?action=getArtistas&t=${Date.now()}`);
       const artistas = await resA.json();
-      if (Array.isArray(artistas) && artistas.length > 0) {
+      if (localStorage.getItem('cs_clientes_dirty') === '1') {
+        // Hay cambios de este computador que el servidor aún no confirmó: NO los pisamos, los volvemos a enviar
+        pushClientes();
+      } else if (Array.isArray(artistas) && artistas.length > 0) {
         clientes = artistas;
         localStorage.setItem('cs_clientes', JSON.stringify(clientes));
       }
@@ -3225,14 +3228,39 @@ function renderSkool(mes) {
 let clientes = JSON.parse(localStorage.getItem('cs_clientes') || '[]');
 let currentClienteId = null;
 
+let clientesSaving = false, clientesAgain = false, clientesRetryTimer = null, clientesToastAt = 0;
 function saveClientes() {
   localStorage.setItem('cs_clientes', JSON.stringify(clientes));
-  // Guardar en Sheet también
-  fetch(SCRIPT_URL, {
-    method: 'POST',
-    body: JSON.stringify({ action: 'saveArtistas', artistas: clientes })
-  }).catch(() => {});
+  localStorage.setItem('cs_clientes_dirty', '1'); // hasta que el servidor confirme, esta copia manda
+  pushClientes();
 }
+async function pushClientes() {
+  if (clientesSaving) { clientesAgain = true; return; }
+  clientesSaving = true;
+  clearTimeout(clientesRetryTimer);
+  let ok = false, motivo = '';
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'saveArtistas', artistas: clientes })
+    });
+    const t = (await res.text()).trim();
+    if (t.startsWith('SAVED')) ok = true;
+    else motivo = (t === 'OK') ? 'Falta actualizar el Apps Script (Nueva versión)' : 'El servidor no confirmó el guardado';
+  } catch (e) { motivo = 'Sin conexión con el servidor'; }
+  clientesSaving = false;
+  if (ok) {
+    if (!clientesAgain) localStorage.removeItem('cs_clientes_dirty');
+  } else {
+    if (Date.now() - clientesToastAt > 20000) {
+      clientesToastAt = Date.now();
+      showToast('⚠ Artistas SIN guardar en el servidor: ' + motivo + '. Se reintenta solo; no cierres esta página.', 'error');
+    }
+    clientesRetryTimer = setTimeout(pushClientes, 15000);
+  }
+  if (clientesAgain) { clientesAgain = false; pushClientes(); }
+}
+window.addEventListener('online', () => { if (localStorage.getItem('cs_clientes_dirty') === '1') pushClientes(); });
 
 function saveConfig() {
   const pct = JSON.parse(localStorage.getItem('cs_pct') || '{}');
