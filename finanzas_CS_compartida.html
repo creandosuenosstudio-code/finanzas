@@ -628,10 +628,14 @@
         <option value="saldado">Saldado (pagó todo)</option>
       </select>
       <select id="filterEstadoCliente" onchange="renderClientes()" style="flex:1;min-width:140px;">
-        <option value="">📋 Todos los estados</option>
-        <option value="activo">Activo</option>
-        <option value="pausado">Pausado</option>
-        <option value="terminado">Terminado</option>
+        <option value="">📋 Todas las categorías</option>
+        <option value="evacuar">Ya pagaron y toca evacuar</option>
+        <option value="virtual">100% Virtuales</option>
+        <option value="menos6">Terminan en menos de 6 meses</option>
+        <option value="6a12">Entre 6 meses y un año</option>
+        <option value="eterno">Eternos</option>
+        <option value="finalizado">Cliente finalizado</option>
+        <option value="__sin">Sin categoría</option>
       </select>
       <select id="filterPais" onchange="renderClientes()" style="flex:1;min-width:130px;">
         <option value="">🌎 Todos los países</option>
@@ -835,9 +839,10 @@
               <option value="menos6">Clientes que terminan en menos de 6 meses</option>
               <option value="6a12">Clientes entre 6 meses y un año</option>
               <option value="eterno">Clientes eternos</option>
+              <option value="finalizado">Cliente finalizado</option>
             </select>
           </div>
-          <div class="form-group">
+          <div class="form-group" style="display:none;">
             <label>Estado</label>
             <select id="cEstado">
               <option value="activo">Activo</option>
@@ -3313,7 +3318,7 @@ function showClienteForm(id = null) {
       document.getElementById('cMesInicioCobro').value = c.mesInicioCobro || '';
       document.getElementById('cFechaInicio').value = c.fechaInicio || '';
       document.getElementById('cEstado').value = c.estado || 'activo';
-      document.getElementById('cCategoria').value = c.categoria || '';
+      document.getElementById('cCategoria').value = getCategoriaCliente(c);
       document.getElementById('cNotas').value = c.notas || '';
     }
   } else {
@@ -3365,8 +3370,8 @@ function saveCliente() {
     diaPago: parseInt(document.getElementById('cDiaPago').value) || 0,
     mesInicioCobro: document.getElementById('cMesInicioCobro').value || '',
     fechaInicio: document.getElementById('cFechaInicio').value,
-    estado: document.getElementById('cEstado').value,
     categoria: document.getElementById('cCategoria').value,
+    estado: estadoSegunCategoria(document.getElementById('cCategoria').value, document.getElementById('cEstado').value),
     notas: document.getElementById('cNotas').value.trim(),
     pagos: clientes.find(x => x.id === id)?.pagos || []
   };
@@ -3512,9 +3517,20 @@ const CATEGORIAS_CLIENTES = [
   { id: 'menos6',  label: 'Clientes que terminan en menos de 6 meses', color: '#f9cb9c' },
   { id: '6a12',    label: 'Clientes entre 6 meses y un año', color: '#dd7e6b' },
   { id: 'eterno',  label: 'Clientes eternos', color: '#d5a6bd' },
+  { id: 'finalizado', label: 'Cliente finalizado', color: '#b6d7a8' },
   { id: '',        label: 'Sin categoría', color: '#8888a0' }
 ];
 let catAbierta = null;
+
+function getCategoriaCliente(c) {
+  const v = c.categoria || '';
+  if (CATEGORIAS_CLIENTES.some(x => x.id === v && v !== '')) return v;
+  return c.estado === 'terminado' ? 'finalizado' : '';
+}
+function estadoSegunCategoria(cat, estadoActual) {
+  if (cat === 'finalizado') return 'terminado';
+  return estadoActual === 'terminado' ? 'activo' : (estadoActual || 'activo');
+}
 
 function toggleCategoria(id) {
   catAbierta = (catAbierta === id) ? null : id;
@@ -3525,6 +3541,7 @@ function cambiarCategoriaCliente(clienteId, cat) {
   const c = clientes.find(x => x.id === clienteId);
   if (!c) return;
   c.categoria = cat;
+  c.estado = estadoSegunCategoria(cat, c.estado);
   saveClientes();
   renderCategoriasClientes();
   showToast('✓ Categoría actualizada');
@@ -3534,9 +3551,8 @@ function renderCategoriasClientes() {
   const cards = document.getElementById('catCards');
   const panel = document.getElementById('catPanel');
   if (!cards || !panel) return;
-  const activos = clientes.filter(c => c.estado !== 'terminado');
-  const validas = CATEGORIAS_CLIENTES.map(x => x.id);
-  const catDe = c => validas.includes(c.categoria || '') ? (c.categoria || '') : '';
+  const activos = clientes;
+  const catDe = getCategoriaCliente;
   const sinCat = activos.filter(c => !catDe(c)).length;
 
   cards.innerHTML = CATEGORIAS_CLIENTES
@@ -3614,7 +3630,7 @@ function renderClientes() {
       (filterPago === 'mora' && isMora(c)) ||
       (filterPago === 'aldia' && !isMora(c) && getSaldoPendiente(c) > 0 && c.estado === 'activo') ||
       (filterPago === 'saldado' && c.estado === 'activo' && getSaldoPendiente(c) === 0);
-    const matchEstado = !filterEstado || c.estado === filterEstado;
+    const matchEstado = !filterEstado || (filterEstado === '__sin' ? getCategoriaCliente(c) === '' : getCategoriaCliente(c) === filterEstado);
     const matchPais = !filterPais || c.pais === filterPais;
     return matchSearch && matchPago && matchEstado && matchPais;
   });
