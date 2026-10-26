@@ -3569,6 +3569,7 @@ function cambiarCategoriaCliente(clienteId, cat) {
   const c = clientes.find(x => x.id === clienteId);
   if (!c) return;
   c.categoria = cat;
+  delete c.ordenCat;
   c.estado = estadoSegunCategoria(cat, c.estado);
   saveClientes();
   renderCategoriasClientes();
@@ -3600,24 +3601,97 @@ function renderCategoriasClientes() {
   if (catAbierta === null) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
   const cat = CATEGORIAS_CLIENTES.find(x => x.id === catAbierta);
   if (!cat) { panel.style.display = 'none'; return; }
-  const lista = activos.filter(c => catDe(c) === cat.id);
+  const lista = listaDeCategoria(cat.id);
   const opts = id => CATEGORIAS_CLIENTES.map(x => `<option value="${x.id}" ${x.id === id ? 'selected' : ''}>${x.id === '' ? 'Sin categoría' : x.label}</option>`).join('');
+  const esc = t => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   panel.style.display = 'block';
   panel.innerHTML = `<div class="card" style="border-left:5px solid ${cat.color};padding:14px;">
-    <div style="font-weight:700;margin-bottom:10px;">${cat.label} · ${lista.length}</div>
-    ${lista.length ? lista.map(c => `
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--border);">
-        <div style="flex:1;min-width:180px;cursor:pointer;" onclick="openFicha('${c.id}')">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-weight:600;">${c.nombre}</span> ${getEstadoBadge(c)}</div>
-          <div style="font-size:0.75rem;color:var(--muted);">${c.servicio || ''}${c.pais ? ' · ' + c.pais : ''}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+      <div style="font-weight:700;">${cat.label} · ${lista.length}</div>
+      ${lista.length > 1 ? `<button class="refresh-btn" onclick="ordenarCategoriaPorFaltantes('${cat.id}')" style="font-size:0.75rem;">⚡ Ordenar: a los que menos canciones les faltan primero</button>` : ''}
+    </div>
+    ${lista.length > 1 ? '<div style="font-size:0.72rem;color:var(--muted);margin-bottom:6px;">Arrastra ☰ o usa ▲▼ para fijar el orden. El número es el turno de evacuación.</div>' : ''}
+    ${lista.length ? lista.map((c, i) => {
+      const falt = cancionesFaltantes(c);
+      return `
+      <div draggable="true" ondragstart="dragIniciar(event,'${c.id}')" ondragover="event.preventDefault()" ondrop="dragSoltar(event,'${c.id}','${cat.id}')" style="padding:10px 0;border-top:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span title="Arrastrar" style="cursor:grab;color:var(--muted);font-size:1.1rem;user-select:none;">☰</span>
+          <span style="background:${cat.color};color:#1a1a1a;font-weight:800;border-radius:50%;min-width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-size:0.8rem;">${i + 1}</span>
+          <div style="flex:1;min-width:170px;cursor:pointer;" onclick="openFicha('${c.id}')">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-weight:600;">${esc(c.nombre)}</span> ${getEstadoBadge(c)}</div>
+            <div style="font-size:0.75rem;color:var(--muted);">${esc(c.servicio)}${c.pais ? ' · ' + esc(c.pais) : ''}${falt !== null ? ` · <b style="color:${falt > 0 ? 'var(--yellow)' : 'var(--green)'};">${falt > 0 ? 'faltan ' + falt + ' canciones' : 'canciones completas'}</b>` : ''}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-weight:700;font-size:0.9rem;color:${getSaldoPendiente(c) > 0 ? 'var(--red)' : 'var(--green)'};">${fmt(getSaldoPendiente(c), c.moneda)}</div>
+            <div style="font-size:0.7rem;color:var(--muted);">pendiente</div>
+          </div>
+          <div style="display:flex;gap:4px;">
+            <button class="refresh-btn" onclick="moverClienteCategoria('${c.id}','${cat.id}',-1)" ${i === 0 ? 'disabled' : ''} style="padding:4px 9px;">▲</button>
+            <button class="refresh-btn" onclick="moverClienteCategoria('${c.id}','${cat.id}',1)" ${i === lista.length - 1 ? 'disabled' : ''} style="padding:4px 9px;">▼</button>
+          </div>
+          <select onchange="cambiarCategoriaCliente('${c.id}', this.value)" style="max-width:170px;font-size:0.75rem;">${opts(cat.id)}</select>
         </div>
-        <div style="text-align:right;">
-          <div style="font-weight:700;font-size:0.9rem;color:${getSaldoPendiente(c) > 0 ? 'var(--red)' : 'var(--green)'};">${fmt(getSaldoPendiente(c), c.moneda)}</div>
-          <div style="font-size:0.7rem;color:var(--muted);">pendiente</div>
-        </div>
-        <select onchange="cambiarCategoriaCliente('${c.id}', this.value)" style="max-width:210px;font-size:0.75rem;">${opts(cat.id)}</select>
-      </div>`).join('') : '<div style="color:var(--muted);font-size:0.85rem;">Ningún artista en esta categoría todavía. Asígnalos desde "Sin categoría" o editando el artista.</div>'}
+        <textarea placeholder="📝 Qué le falta por entregar / notas para evacuarlo…" onchange="guardarNotaEvacuar('${c.id}', this.value)" rows="1" style="width:100%;margin-top:8px;font-size:0.8rem;resize:vertical;">${esc(c.notaEvacuar)}</textarea>
+      </div>`;
+    }).join('') : '<div style="color:var(--muted);font-size:0.85rem;">Ningún artista en esta categoría todavía. Asígnalos desde "Sin categoría" o editando el artista.</div>'}
   </div>`;
+}
+
+// ----- Orden y notas dentro de una categoría -----
+function listaDeCategoria(catId) {
+  return clientes
+    .map((c, i) => ({ c, i }))
+    .filter(x => getCategoriaCliente(x.c) === catId)
+    .sort((a, b) => {
+      const oa = typeof a.c.ordenCat === 'number' ? a.c.ordenCat : 1e9;
+      const ob = typeof b.c.ordenCat === 'number' ? b.c.ordenCat : 1e9;
+      return oa - ob || a.i - b.i;
+    })
+    .map(x => x.c);
+}
+function cancionesFaltantes(c) {
+  const total = parseFloat(c.canciones) || 0;
+  if (!total) return null;
+  return Math.max(total - (parseFloat(c.cancionesEntregadas) || 0), 0);
+}
+function aplicarOrden(lista) {
+  lista.forEach((c, i) => { c.ordenCat = i; });
+  saveClientes();
+  renderCategoriasClientes();
+}
+function moverClienteCategoria(id, catId, dir) {
+  const lista = listaDeCategoria(catId);
+  const i = lista.findIndex(c => c.id === id), j = i + dir;
+  if (i < 0 || j < 0 || j >= lista.length) return;
+  [lista[i], lista[j]] = [lista[j], lista[i]];
+  aplicarOrden(lista);
+}
+let dragId = null;
+function dragIniciar(ev, id) { dragId = id; try { ev.dataTransfer.setData('text/plain', id); } catch (e) {} }
+function dragSoltar(ev, destinoId, catId) {
+  ev.preventDefault();
+  if (!dragId || dragId === destinoId) return;
+  const lista = listaDeCategoria(catId);
+  const i = lista.findIndex(c => c.id === dragId), j = lista.findIndex(c => c.id === destinoId);
+  dragId = null;
+  if (i < 0 || j < 0) return;
+  const [mov] = lista.splice(i, 1);
+  lista.splice(j, 0, mov);
+  aplicarOrden(lista);
+}
+function ordenarCategoriaPorFaltantes(catId) {
+  const lista = listaDeCategoria(catId);
+  const clave = c => { const f = cancionesFaltantes(c); return f === null ? 1e9 : f; };
+  lista.sort((a, b) => clave(a) - clave(b));
+  aplicarOrden(lista);
+  showToast('✓ Ordenados: primero los que menos canciones les faltan');
+}
+function guardarNotaEvacuar(id, texto) {
+  const c = clientes.find(x => x.id === id);
+  if (!c) return;
+  c.notaEvacuar = texto.trim();
+  saveClientes();
 }
 
 function limpiarFiltros() {
