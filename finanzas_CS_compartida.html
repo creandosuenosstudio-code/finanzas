@@ -3608,11 +3608,9 @@ function renderCategoriasClientes() {
   panel.innerHTML = `<div class="card" style="border-left:5px solid ${cat.color};padding:14px;">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
       <div style="font-weight:700;">${cat.label} · ${lista.length}</div>
-      ${lista.length > 1 ? `<button class="refresh-btn" onclick="ordenarCategoriaPorFaltantes('${cat.id}')" style="font-size:0.75rem;">⚡ Ordenar: a los que menos canciones les faltan primero</button>` : ''}
     </div>
     ${lista.length > 1 ? '<div style="font-size:0.72rem;color:var(--muted);margin-bottom:6px;">Arrastra ☰ o usa ▲▼ para fijar el orden. El número es el turno de evacuación.</div>' : ''}
     ${lista.length ? lista.map((c, i) => {
-      const falt = cancionesFaltantes(c);
       return `
       <div draggable="true" ondragstart="dragIniciar(event,'${c.id}')" ondragover="event.preventDefault()" ondrop="dragSoltar(event,'${c.id}','${cat.id}')" style="padding:10px 0;border-top:1px solid var(--border);">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -3620,7 +3618,7 @@ function renderCategoriasClientes() {
           <span style="background:${cat.color};color:#1a1a1a;font-weight:800;border-radius:50%;min-width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-size:0.8rem;">${i + 1}</span>
           <div style="flex:1;min-width:170px;cursor:pointer;" onclick="openFicha('${c.id}')">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-weight:600;">${esc(c.nombre)}</span> ${getEstadoBadge(c)}</div>
-            <div style="font-size:0.75rem;color:var(--muted);">${esc(c.servicio)}${c.pais ? ' · ' + esc(c.pais) : ''}${falt !== null ? ` · <b style="color:${falt > 0 ? 'var(--yellow)' : 'var(--green)'};">${falt > 0 ? 'faltan ' + falt + ' canciones' : 'canciones completas'}</b>` : ''}</div>
+            <div style="font-size:0.75rem;color:var(--muted);">${esc(c.servicio)}${c.pais ? ' · ' + esc(c.pais) : ''}</div>
           </div>
           <div style="text-align:right;">
             <div style="font-weight:700;font-size:0.9rem;color:${getSaldoPendiente(c) > 0 ? 'var(--red)' : 'var(--green)'};">${fmt(getSaldoPendiente(c), c.moneda)}</div>
@@ -3650,11 +3648,6 @@ function listaDeCategoria(catId) {
     })
     .map(x => x.c);
 }
-function cancionesFaltantes(c) {
-  const total = parseFloat(c.canciones) || 0;
-  if (!total) return null;
-  return Math.max(total - (parseFloat(c.cancionesEntregadas) || 0), 0);
-}
 function aplicarOrden(lista) {
   lista.forEach((c, i) => { c.ordenCat = i; });
   saveClientes();
@@ -3679,13 +3672,6 @@ function dragSoltar(ev, destinoId, catId) {
   const [mov] = lista.splice(i, 1);
   lista.splice(j, 0, mov);
   aplicarOrden(lista);
-}
-function ordenarCategoriaPorFaltantes(catId) {
-  const lista = listaDeCategoria(catId);
-  const clave = c => { const f = cancionesFaltantes(c); return f === null ? 1e9 : f; };
-  lista.sort((a, b) => clave(a) - clave(b));
-  aplicarOrden(lista);
-  showToast('✓ Ordenados: primero los que menos canciones les faltan');
 }
 function guardarNotaEvacuar(id, texto) {
   const c = clientes.find(x => x.id === id);
