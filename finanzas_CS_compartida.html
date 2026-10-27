@@ -629,7 +629,8 @@
       </select>
       <select id="filterEstadoCliente" onchange="renderClientes()" style="flex:1;min-width:140px;">
         <option value="">📋 Todas las categorías</option>
-        <option value="evacuar">Pagaron todo · audio y video</option>
+        <option value="evacuar">Pagaron todo · audio</option>
+        <option value="video">Pagaron todo · falta el video</option>
         <option value="marketing">Pagaron todo · marketing</option>
         <option value="virtual">100% Virtuales</option>
         <option value="menos6">Terminan en menos de 6 meses</option>
@@ -835,7 +836,8 @@
             <label>Categoría</label>
             <select id="cCategoria">
               <option value="">Sin categoría</option>
-              <option value="evacuar">Clientes que ya pagaron todo, van por audio y video</option>
+              <option value="evacuar">Clientes que ya pagaron todo, van por audio</option>
+              <option value="video">Clientes que ya pagaron todo, falta el video</option>
               <option value="marketing">Clientes que ya pagaron todo, van por marketing</option>
               <option value="virtual">Clientes 100% Virtuales (no afecta el cierre de sede)</option>
               <option value="menos6">Clientes que terminan en menos de 6 meses</option>
@@ -3542,7 +3544,8 @@ function getEstadoBadge(cliente) {
 
 // ===== CATEGORÍAS DE ARTISTAS =====
 const CATEGORIAS_CLIENTES = [
-  { id: 'evacuar', label: 'Clientes que ya pagaron todo, van por audio y video', color: '#a4c2f4' },
+  { id: 'evacuar', label: 'Clientes que ya pagaron todo, van por audio', color: '#a4c2f4' },
+  { id: 'video', label: 'Clientes que ya pagaron todo, falta el video', color: '#ffe599' },
   { id: 'marketing', label: 'Clientes que ya pagaron todo, van por marketing', color: '#b4a7d6' },
   { id: 'virtual', label: 'Clientes 100% Virtuales (no afecta el cierre de sede)', color: '#a2c4c9' },
   { id: 'menos6',  label: 'Clientes que terminan en menos de 6 meses', color: '#f9cb9c' },
