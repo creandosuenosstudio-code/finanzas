@@ -597,10 +597,13 @@
     <div class="section-header">
       <h2>Artistas</h2>
       <div style="display:flex;gap:10px;">
+        <button class="refresh-btn" onclick="toggleAuditoria()">🔍 Auditar cuentas</button>
         <button class="refresh-btn" onclick="toggleServiceManager()">🎵 Gestionar servicios</button>
         <button class="btn-primary" style="width:auto;padding:9px 20px;" onclick="showClienteForm()">+ Nuevo artista</button>
       </div>
     </div>
+
+    <div id="auditPanel" style="display:none;margin-bottom:20px;"></div>
 
     <!-- GESTOR DE SERVICIOS -->
     <div id="serviceManagerPanel" style="display:none;margin-bottom:20px;">
@@ -3442,12 +3445,19 @@ function saveCliente() {
 }
 
 function registrarIngresoCliente(cliente, monto, fecha, medio, tipoPago = 'Abono') {
+  const moneda = cliente.moneda || 'COP';
+  // En dólares se guarda la tasa del día para convertir a pesos (igual que al registrar una transacción normal)
+  const tasaDia = moneda === 'USD' ? (tasaUSD || null) : null;
+  const amountCOP = moneda === 'USD' ? Math.round(monto * (tasaUSD || 0)) : monto;
   const tx = {
-    id: Date.now(),
+    id: Date.now() + Math.floor(Math.random() * 1000),
     type: 'income',
     desc: cliente.nombre,
+    artistaId: cliente.id,
     amount: monto,
-    currency: cliente.moneda || 'COP',
+    currency: moneda,
+    amountCOP,
+    tasaDia,
     cat: cliente.servicio,
     payment: medio,
     tipoPago: tipoPago,
@@ -3457,7 +3467,9 @@ function registrarIngresoCliente(cliente, monto, fecha, medio, tipoPago = 'Abono
     who: getWho()
   };
   transactions.unshift(tx);
-  saveTransaction(tx).catch(() => {});
+  // Se guarda con cola de reintentos: si falla la red, queda pendiente y no se pierde
+  enqueueReportesOp(Object.assign({ action: 'add' }, tx));
+  try { populateMonthSelectors(); renderDashboard(); renderTable(); } catch (e) {}
 }
 
 function getTotalPagado(cliente) {
@@ -3695,6 +3707,46 @@ function guardarNotaEvacuar(id, texto) {
   saveClientes();
 }
 
+
+// ===== AUDITORÍA: ¿lo que dice la ficha de cada artista coincide con los ingresos de Movimientos? =====
+function toggleAuditoria() {
+  const el = document.getElementById('auditPanel');
+  if (!el) return;
+  if (el.style.display === 'block') { el.style.display = 'none'; return; }
+  renderAuditoria();
+  el.style.display = 'block';
+}
+function renderAuditoria() {
+  const el = document.getElementById('auditPanel');
+  const norm = t => String(t || '').trim().toLowerCase();
+  const filas = clientes.map(c => {
+    const moneda = c.moneda || 'COP';
+    const fichaPagos = (c.pagos || []).reduce((s, p) => s + (parseFloat(p.monto) || 0), 0);
+    const hist = parseFloat(c.abonoHistorico) || 0;
+    const txs = transactions.filter(t => t.type === 'income' && (String(t.artistaId || '') === String(c.id) || norm(t.desc) === norm(c.nombre)));
+    const enMov = txs.filter(t => (t.currency || 'COP') === moneda).reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+    const otraMoneda = txs.filter(t => (t.currency || 'COP') !== moneda).length;
+    const dif = fichaPagos - enMov;
+    return { c, moneda, fichaPagos, hist, enMov, otraMoneda, dif, nTx: txs.length };
+  });
+  const malos = filas.filter(f => Math.abs(f.dif) > 0.5 || f.otraMoneda > 0).sort((a, b) => Math.abs(b.dif) - Math.abs(a.dif));
+  const lineas = malos.map(f => `
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:9px 0;border-top:1px solid var(--border);">
+      <div style="flex:1;min-width:170px;cursor:pointer;" onclick="openFicha('${f.c.id}')"><b>${f.c.nombre}</b><div style="font-size:0.72rem;color:var(--muted);">${f.c.servicio || ''} · ${f.moneda}</div></div>
+      <div style="text-align:right;font-size:0.8rem;">En la ficha: <b>${fmt(f.fichaPagos, f.moneda)}</b></div>
+      <div style="text-align:right;font-size:0.8rem;">En Movimientos: <b>${fmt(f.enMov, f.moneda)}</b></div>
+      <div style="text-align:right;font-size:0.82rem;font-weight:700;color:${f.dif > 0 ? 'var(--yellow)' : 'var(--red)'};">${f.dif > 0 ? 'Falta en Movimientos ' : 'Falta en la ficha '}${fmt(Math.abs(f.dif), f.moneda)}</div>
+    </div>`).join('');
+  el.innerHTML = `<div class="card" style="padding:14px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div style="font-weight:700;">🔍 Auditoría de cuentas · ${filas.length - malos.length} de ${filas.length} artistas cuadran</div>
+      <button class="refresh-btn" onclick="toggleAuditoria()">Cerrar</button>
+    </div>
+    <div style="font-size:0.74rem;color:var(--muted);margin:6px 0 8px;">Compara, por artista, los pagos de su ficha con los ingresos que aparecen en Movimientos (en la moneda del artista). El "Abono histórico" no cuenta porque no genera ingreso.</div>
+    ${malos.length ? lineas : '<div style="color:var(--green);font-weight:600;padding:10px 0;">✓ Todo cuadra: cada pago de las fichas aparece también en Movimientos.</div>'}
+  </div>`;
+}
+
 function limpiarFiltros() {
   document.getElementById('clienteSearch').value = '';
   document.getElementById('filterEstadoPago').value = '';
@@ -3915,7 +3967,13 @@ async function traerPagosDelServidor(c) {
   } catch (e) {}
 }
 
+let registrandoPago = false;
 async function registrarPago(tipo = 'cuota') {
+  if (registrandoPago) return; // evita registrar el mismo pago dos veces por doble clic
+  registrandoPago = true;
+  try { await registrarPagoInterno(tipo); } finally { registrandoPago = false; }
+}
+async function registrarPagoInterno(tipo = 'cuota') {
   const esCuota = tipo === 'cuota';
   const monto = parseAmt(esCuota ? 'pagoMonto' : 'abonoMonto');
   const fecha = document.getElementById(esCuota ? 'pagoFecha' : 'abonoFecha').value;
