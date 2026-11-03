@@ -779,6 +779,7 @@
           <div class="form-group">
             <label>Moneda del contrato</label>
             <select id="cMoneda">
+              <option value="">— Elige la moneda del contrato —</option>
               <option value="COP">🇨🇴 Peso colombiano (COP)</option>
               <option value="USD">🇺🇸 Dólar (USD)</option>
             </select>
@@ -899,6 +900,7 @@
           </div>
 
           <!-- Info personal -->
+          <div id="fichaAvisoMoneda" style="display:none;margin-bottom:14px;"></div>
           <div id="fichaInfo" style="margin-bottom:24px;"></div>
 
           <!-- Registrar pago -->
@@ -907,7 +909,7 @@
             <div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;">Marca este mes como pagado y quita la mora si existía.</div>
             <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
               <div style="flex:1;min-width:120px;">
-                <label>Monto</label>
+                <label>Monto <span class="lblMonedaFicha"></span></label>
                 <input type="text" id="pagoMonto" placeholder="0" oninput="fmtInput(this)" inputmode="numeric">
               </div>
               <div style="flex:1;min-width:120px;">
@@ -928,7 +930,7 @@
             <div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;">Reduce el saldo del contrato pero <strong>no cuenta como cuota mensual</strong>. El artista sigue debiendo su cuota del mes.</div>
             <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
               <div style="flex:1;min-width:120px;">
-                <label>Monto</label>
+                <label>Monto <span class="lblMonedaFicha"></span></label>
                 <input type="text" id="abonoMonto" placeholder="0" oninput="fmtInput(this)" inputmode="numeric">
               </div>
               <div style="flex:1;min-width:120px;">
@@ -1185,21 +1187,57 @@ function showToast(msg, type='success') {
 }
 
 // ─── DATA LAYER ──────────────────────────────────────────────────────────────
+function filasATransacciones(rows) {
+  return rows.slice(1).map(r => ({
+    id: r[0], type: r[1], desc: r[2],
+    amount: parseFloat(r[3]) || 0,
+    cat: r[4], date: String(r[5] || ''), note: r[6], who: r[7],
+    currency: r[8] || 'COP', payment: r[9] || '',
+    tipoPago: r[10] || '', programa: r[11] || '',
+    amountCOP: parseFloat(r[12]) || 0,
+    tasaDia: parseFloat(r[13]) || 0
+  })).filter(t => t.id).reverse();
+}
+
+// Vuelve a traer los movimientos del servidor (para ver lo que registraron otros computadores) y repinta la pantalla actual
+let refrescandoTx = false, ultimoRefrescoTx = Date.now();
+async function refrescarTransacciones() {
+  if (refrescandoTx) return;
+  refrescandoTx = true;
+  try {
+    const res = await fetch(`${SCRIPT_URL}?action=get&t=${Date.now()}`);
+    const rows = await res.json();
+    if (!Array.isArray(rows)) return;
+    const nuevas = filasATransacciones(rows);
+    // Lo que este computador registró y aún no llegó al servidor se conserva
+    const ids = new Set(nuevas.map(t => String(t.id)));
+    (reportesPending || []).filter(o => o.action === 'add' && !ids.has(String(o.id))).forEach(o => nuevas.unshift({
+      id: o.id, type: o.type, desc: o.desc, amount: parseFloat(o.amount) || 0, cat: o.cat, date: String(o.date || ''),
+      note: o.note, who: o.who, currency: o.currency || 'COP', payment: o.payment || '', tipoPago: o.tipoPago || '',
+      programa: o.programa || '', amountCOP: parseFloat(o.amountCOP) || 0, tasaDia: parseFloat(o.tasaDia) || 0
+    }));
+    transactions = nuevas;
+    ultimoRefrescoTx = Date.now();
+    populateMonthSelectors();
+    const activa = document.querySelector('.section.active')?.id;
+    if (activa === 'dashboard') renderDashboard();
+    if (activa === 'movimientos') renderTable();
+    if (activa === 'reportes') renderReportes();
+    if (activa === 'clientes') renderClientes();
+  } catch (e) {} finally { refrescandoTx = false; }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Date.now() - ultimoRefrescoTx > 60000) refrescarTransacciones();
+});
+setInterval(() => { if (document.visibilityState === 'visible' && Date.now() - ultimoRefrescoTx > 120000) refrescarTransacciones(); }, 60000);
+
 async function loadData() {
   setSyncStatus('syncing');
   try {
     // Cargar transacciones
     const res = await fetch(`${SCRIPT_URL}?action=get&t=${Date.now()}`);
     const rows = await res.json();
-    transactions = rows.slice(1).map(r => ({
-      id: r[0], type: r[1], desc: r[2],
-      amount: parseFloat(r[3]) || 0,
-      cat: r[4], date: r[5], note: r[6], who: r[7],
-      currency: r[8] || 'COP', payment: r[9] || '',
-      tipoPago: r[10] || '', programa: r[11] || '',
-      amountCOP: parseFloat(r[12]) || 0,
-      tasaDia: parseFloat(r[13]) || 0
-    })).filter(t => t.id).reverse();
+    transactions = filasATransacciones(rows);
 
     // Cargar artistas
     try {
@@ -1257,6 +1295,9 @@ async function loadData() {
     renderDashboard();
     renderTable();
     renderBudget();
+    if (document.getElementById('reportes')?.classList.contains('active')) renderReportes();
+    if (document.getElementById('clientes')?.classList.contains('active')) renderClientes();
+    ultimoRefrescoTx = Date.now();
   } catch(e) {
     setSyncStatus('error');
     showToast('Error al cargar datos. Revisa tu conexión.', 'error');
@@ -1298,6 +1339,7 @@ function showSection(id) {
   if (id === 'presupuesto') renderBudget();
   if (id === 'clientes') renderClientes();
   if (id === 'reportes') { renderReportes(); refrescarReportesDelServidor(); }
+  if ((id === 'reportes' || id === 'dashboard' || id === 'movimientos') && Date.now() - ultimoRefrescoTx > 20000) refrescarTransacciones();
 }
 
 // ─── TYPE TOGGLE ─────────────────────────────────────────────────────────────
@@ -3372,7 +3414,7 @@ function showClienteForm(id = null) {
     document.getElementById('cCumple').value = '';
     document.getElementById('cCumple2').value = '';
     document.getElementById('cPaisCodigo').value = '+57';
-    document.getElementById('cMoneda').value = 'COP';
+    document.getElementById('cMoneda').value = '';
     document.getElementById('cFechaInicio').value = new Date().toISOString().slice(0,10);
     document.getElementById('cEstado').value = 'activo';
     document.getElementById('cCategoria').value = '';
@@ -3388,6 +3430,7 @@ function saveCliente() {
   const id = document.getElementById('cId').value || Date.now().toString();
   const nombre = document.getElementById('cNombre').value.trim();
   if (!nombre) { showToast('El nombre es requerido.', 'error'); return; }
+  if (!document.getElementById('cMoneda').value) { showToast('Elige la moneda del contrato (COP o USD).', 'error'); return; }
 
   const cliente = {
     id,
@@ -3729,6 +3772,7 @@ function renderAuditoria() {
     const dif = fichaPagos - enMov;
     return { c, moneda, fichaPagos, hist, enMov, otraMoneda, dif, nTx: txs.length };
   });
+  const sospechosos = clientes.filter(monedaSospechosa);
   const malos = filas.filter(f => Math.abs(f.dif) > 0.5 || f.otraMoneda > 0).sort((a, b) => Math.abs(b.dif) - Math.abs(a.dif));
   const lineas = malos.map(f => `
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:9px 0;border-top:1px solid var(--border);">
@@ -3743,6 +3787,7 @@ function renderAuditoria() {
       <button class="refresh-btn" onclick="toggleAuditoria()">Cerrar</button>
     </div>
     <div style="font-size:0.74rem;color:var(--muted);margin:6px 0 8px;">Compara, por artista, los pagos de su ficha con los ingresos que aparecen en Movimientos (en la moneda del artista). El "Abono histórico" no cuenta porque no genera ingreso.</div>
+    ${sospechosos.length ? `<div style="background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.5);border-radius:10px;padding:10px 14px;font-size:0.82rem;margin-bottom:8px;">⚠ <b>${sospechosos.length} contrato(s) en pesos con valor muy bajo</b> (probablemente son en dólares): ${sospechosos.map(c => `<a href="#" onclick="openFicha('${c.id}');return false;" style="color:inherit;text-decoration:underline;">${c.nombre}</a>`).join(', ')}. Ábrelos, toca Editar y cambia la moneda a USD.</div>` : ''}
     ${malos.length ? lineas : '<div style="color:var(--green);font-weight:600;padding:10px 0;">✓ Todo cuadra: cada pago de las fichas aparece también en Movimientos.</div>'}
   </div>`;
 }
@@ -3850,6 +3895,11 @@ function renderClientes() {
   }).join('');
 }
 
+// Un contrato guardado en pesos con un valor muy bajo (ej. $975) casi seguro es de dólares
+function monedaSospechosa(c) {
+  return (c.moneda || 'COP') === 'COP' && (parseFloat(c.total) || 0) > 0 && (parseFloat(c.total) || 0) < 20000;
+}
+
 function openFicha(id) {
   currentClienteId = id;
   const c = clientes.find(x => x.id === id);
@@ -3859,6 +3909,14 @@ function openFicha(id) {
   const pendiente = getSaldoPendiente(c);
   const pct = c.total > 0 ? Math.min((pagado/c.total)*100, 100) : 0;
 
+  document.querySelectorAll('.lblMonedaFicha').forEach(el => { el.textContent = '(' + (c.moneda || 'COP') + ')'; el.style.color = (c.moneda === 'USD') ? 'var(--green)' : 'var(--muted)'; });
+  const avisoM = document.getElementById('fichaAvisoMoneda');
+  if (avisoM) {
+    if (monedaSospechosa(c)) {
+      avisoM.style.display = 'block';
+      avisoM.innerHTML = `<div style="background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.5);border-radius:10px;padding:10px 14px;font-size:0.82rem;">⚠ <b>Este contrato está en pesos (COP)</b> pero el valor (${fmt(c.total)}) parece ser en dólares. Si es así, toca <b>Editar</b> y cambia la moneda a USD; si no, los pagos se sumarán como pesos.</div>`;
+    } else { avisoM.style.display = 'none'; avisoM.innerHTML = ''; }
+  }
   document.getElementById('fichaName').textContent = c.nombre;
   document.getElementById('fichaService').textContent = c.servicio + (c.pais ? ' · ' + c.pais : '');
   document.getElementById('fichaPct').textContent = pct.toFixed(0) + '%';
@@ -3984,6 +4042,8 @@ async function registrarPagoInterno(tipo = 'cuota') {
   const c = clientes.find(x => x.id === currentClienteId);
   if (!c) return;
 
+  if (monedaSospechosa(c) && !confirm(`⚠ El contrato de ${c.nombre} está guardado en PESOS (COP) pero su valor (${fmt(c.total)}) parece ser en dólares.\n\nSi das Aceptar, este pago de ${fmt(monto)} se registrará como PESOS.\n\nRecomendado: toca Cancelar, ve a Editar y cambia la moneda a USD.`)) return;
+
   // Antes de sumar este pago, traer los pagos que otros computadores ya registraron (así el recibo sale con el total real)
   await traerPagosDelServidor(c);
 
@@ -4075,8 +4135,8 @@ async function registrarPagoInterno(tipo = 'cuota') {
   document.getElementById(esCuota ? 'pagoMedio' : 'abonoMedio').value = '';
 
   showToast(esCuota
-    ? `✓ Cuota de ${fmt(monto)} registrada`
-    : `✓ Abono al capital de ${fmt(monto)} registrado`
+    ? `✓ Cuota de ${fmt(monto, c.moneda)} registrada`
+    : `✓ Abono al capital de ${fmt(monto, c.moneda)} registrado`
   );
   openFicha(currentClienteId);
   renderClientes();
