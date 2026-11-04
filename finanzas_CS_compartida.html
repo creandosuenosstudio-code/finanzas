@@ -1025,6 +1025,17 @@
           <label>Inversión en publicidad del mes (COP)</label>
           <input type="text" id="skoolInversion" placeholder="0" oninput="fmtInput(this);saveSkoolInversion()" onblur="flushDebounceReportes()" inputmode="numeric" style="margin-top:6px;">
         </div>
+        <div style="flex:1;min-width:240px;">
+          <label>Comisión mensual de Skool (lo que pagas a Skool este mes)</label>
+          <div style="display:flex;gap:8px;margin-top:6px;">
+            <input type="text" id="skoolCuota" placeholder="Ej: 100" oninput="fmtInput(this);saveSkoolCuota()" onblur="flushDebounceReportes()" inputmode="numeric" style="flex:2;min-width:90px;">
+            <select id="skoolCuotaMoneda" onchange="saveSkoolCuota()" style="flex:1;min-width:80px;">
+              <option value="USD">USD</option>
+              <option value="COP">COP</option>
+            </select>
+          </div>
+          <div id="skoolCuotaCOP" style="font-size:0.72rem;color:var(--muted);margin-top:4px;"></div>
+        </div>
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
@@ -1035,6 +1046,10 @@
         <div class="kpi" style="padding:16px;">
           <div class="kpi-label">Comisiones plataforma</div>
           <div class="kpi-value yellow" id="skoolComisiones" style="font-size:1.1rem;">$0</div>
+        </div>
+        <div class="kpi" style="padding:16px;">
+          <div class="kpi-label">Comisión mensual de Skool</div>
+          <div class="kpi-value yellow" id="skoolCuotaKpi" style="font-size:1.1rem;">$0</div>
         </div>
         <div class="kpi" style="padding:16px;">
           <div class="kpi-label">Invertido en pauta</div>
@@ -3167,6 +3182,23 @@ function saveSkoolInversion() {
   });
 }
 
+function saveSkoolCuota() {
+  const mes = document.getElementById('reportesMes')?.value || currentMonth();
+  const valor = parseAmt('skoolCuota');
+  const moneda = document.getElementById('skoolCuotaMoneda')?.value || 'USD';
+  const cop = moneda === 'USD' ? Math.round(convertirACOP(valor, 'USD')) : valor;
+  skoolInversiones['cuota:' + mes] = valor;
+  skoolInversiones['cuotaCOP:' + mes] = cop;
+  persistSkoolLocal();
+  renderSkool(mes);
+  // Se guardan el valor escrito y su equivalente en pesos (con la tasa del momento), cuando dejas de escribir
+  debounceReportes('cuota:' + mes, 700, () => {
+    persistSkoolLocal();
+    enqueueReportesOp({ action: 'skoolSetInversion', mes: 'cuota:' + mes, valor });
+    enqueueReportesOp({ action: 'skoolSetInversion', mes: 'cuotaCOP:' + mes, valor: cop });
+  });
+}
+
 async function addSkoolCliente() {
   const nombre = document.getElementById('skoolNombre').value.trim();
   const tipo = document.getElementById('skoolTipo').value;
@@ -3232,16 +3264,30 @@ function renderSkool(mes) {
     inversionInput.value = skoolInversiones[mes] ? new Intl.NumberFormat('es-CO').format(skoolInversiones[mes]) : '';
   }
 
+  const cuotaInput = document.getElementById('skoolCuota');
+  const cuotaSel = document.getElementById('skoolCuotaMoneda');
+  const cv = skoolInversiones['cuota:' + mes] || 0, cc = skoolInversiones['cuotaCOP:' + mes] || 0;
+  if (cuotaInput && document.activeElement !== cuotaInput && document.activeElement !== cuotaSel) {
+    cuotaInput.value = cv ? new Intl.NumberFormat('es-CO').format(cv) : '';
+    if (cuotaSel && cv) cuotaSel.value = (cc === cv) ? 'COP' : 'USD';
+  }
+  const cuotaCopEl = document.getElementById('skoolCuotaCOP');
+  if (cuotaCopEl) cuotaCopEl.textContent = (cv && cc !== cv) ? '≈ ' + fmt(cc) + ' COP (tasa del día que lo escribiste)' : '';
+
   const delMes = skoolClientes.filter(c => c.mes === mes);
   const totalVendido = delMes.reduce((s, c) => s + skoolMontoCOP(c), 0);
   const totalComisiones = delMes.reduce((s, c) => s + (c.comisionCOP != null ? c.comisionCOP : skoolMontoCOP(c) * ((c.comisionPct || 0) / 100)), 0);
   const inversion = skoolInversiones[mes] || 0;
-  const utilidad = totalVendido - totalComisiones - inversion;
+  const cuotaValor = skoolInversiones['cuota:' + mes] || 0;
+  const cuotaCOP = skoolInversiones['cuotaCOP:' + mes] || 0;
+  const utilidad = totalVendido - totalComisiones - cuotaCOP - inversion;
   const margen = totalVendido > 0 ? (utilidad / totalVendido * 100) : 0;
 
   const vendidoEl = document.getElementById('skoolVendido');
   const comisionesEl = document.getElementById('skoolComisiones');
   const invertidoEl = document.getElementById('skoolInvertido');
+  const cuotaKpiEl = document.getElementById('skoolCuotaKpi');
+  if (cuotaKpiEl) cuotaKpiEl.textContent = fmt(cuotaCOP);
   const utilEl = document.getElementById('skoolUtilidad');
   const margenEl = document.getElementById('skoolMargen');
   if (vendidoEl) vendidoEl.textContent = fmt(totalVendido);
