@@ -1636,21 +1636,26 @@ async function addTransaction() {
   const tx = { id: Date.now(), type: selectedType, desc, artistaId, amount, currency, amountCOP, tasaDia, cat, programa, payment, date, note, who };
 
   try {
-    await saveTransaction(tx);
+    // Se guarda con cola de reintentos (igual que los pagos desde la ficha): aparece al instante en el dashboard
     transactions.unshift(tx);
+    enqueueReportesOp(Object.assign({ action: 'add' }, tx));
 
-    // Si es ingreso de un artista registrado, abonarlo a su contrato
-    if (selectedType === 'income' && artistaId) {
-      const c = clientes.find(x => x.id === artistaId);
-      if (c && getSaldoPendiente(c) > 0) {
+    // Si es ingreso de un artista registrado, abonarlo a su contrato (busca por id y, si no, por nombre)
+    if (selectedType === 'income' && artistaId && artistaId !== '__nuevo') {
+      const c = clientes.find(x => String(x.id) === String(artistaId)) || clientes.find(x => x.nombre === desc);
+      if (c) {
+        await traerPagosDelServidor(c); // por si otro computador registró pagos
         const numRecibo = 'CS-' + Date.now().toString().slice(-6);
-        const pago = { id: Date.now().toString(), monto: amount, fecha: tx.date, medio: tx.payment || '', registradoPor: getWho(), numRecibo };
+        const pago = { id: String(Date.now()) + Math.floor(Math.random() * 100), monto: amount, fecha: tx.date, medio: tx.payment || '', registradoPor: getWho(), numRecibo, tipo: 'cuota' };
         c.pagos = c.pagos || [];
         c.pagos.push(pago);
         saveClientes();
         enqueueReportesOp({ action: 'addPago', clienteId: c.id, pago });
-        // Generar recibo automáticamente
-        setTimeout(() => generarRecibo(c, pago, c.pagos.length === 1), 500);
+        try { renderClientes(); } catch (e) {}
+        // El recibo sale ya con el saldo descontado
+        generarRecibo(c, pago, c.pagos.length === 1);
+      } else {
+        showToast('⚠ No encontré el contrato de ese artista: el ingreso quedó en el dashboard pero NO se descontó de su deuda.', 'error');
       }
     }
 
@@ -2032,7 +2037,7 @@ function onArtistaSelect() {
   } else if (val) {
     input.style.display = 'none';
     infoBox.style.display = 'block';
-    const c = clientes.find(x => x.id === val);
+    const c = clientes.find(x => String(x.id) === String(val));
     if (c) {
       document.getElementById('artistaServicio').textContent = c.servicio;
       document.getElementById('artistaSaldo').textContent = 'Saldo pendiente: ' + fmt(getSaldoPendiente(c), c.moneda);
@@ -2059,7 +2064,7 @@ function getArtistaDesc() {
   const val = sel?.value;
   if (val === '__nuevo') return document.getElementById('fDesc').value.trim();
   if (val) {
-    const c = clientes.find(x => x.id === val);
+    const c = clientes.find(x => String(x.id) === String(val));
     return c ? c.nombre : '';
   }
   return '';
